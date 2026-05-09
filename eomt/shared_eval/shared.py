@@ -205,8 +205,8 @@ def remap_target_ids(target, id_map, ignore_index=255):
     return remapped
 
 
-def remap_logits(logits, id_map):
-    shared = logits.new_zeros(...)
+def remap_logits(logits, id_map, num_shared):
+    shared = logits.new_zeros((num_shared, *logits.shape[1:]))
     for src_id, dst_id in id_map.items():
         shared[dst_id] += logits[src_id]
     return shared
