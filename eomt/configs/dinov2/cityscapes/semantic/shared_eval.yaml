@@ -1,12 +1,11 @@
 trainer:
-  max_epochs = 107
+  max_epochs: 107
   logger:
     class_path: lightning.pytorch.loggers.wandb.WandbLogger
     init_args:
       resume: allow
       project: "eomt"
       name: "cityscapes_semantic_eomt_shared_eval"
-
 model:
   class_path: training.mask_classification_semantic_shared.MaskClassificationSemanticShared
   init_args:
@@ -23,6 +22,5 @@ model:
           class_path: models.vit.ViT
           init_args:
             backbone_name: vit_base_patch14_reg4_dinov2
-
 data:
   class_path: datasets.cityscapes_semantic.CityscapesSemantic
