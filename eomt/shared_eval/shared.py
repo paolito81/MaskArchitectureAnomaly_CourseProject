@@ -172,7 +172,7 @@ SHARED_CLASSES = [
     "bus",
     "motorcycle",
     "bicycle",
-    "traffic_light",
+    "traffic light",
 ]
 
 SHARED_LABEL_TO_ID = {label: id for id, label in enumerate(SHARED_CLASSES)}
