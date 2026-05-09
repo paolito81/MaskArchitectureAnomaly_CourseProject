@@ -44,7 +44,6 @@ class MaskClassificationSemanticShared(MaskClassificationSemantic):
         delta_weights: bool = False,
         load_ckpt_class_head: bool = True,
         src_to_shared: str = "cityscapes",
-        num_shared_classes: int = 7,
     ):
         super().__init__(
             network=network,
@@ -73,7 +72,6 @@ class MaskClassificationSemanticShared(MaskClassificationSemantic):
             ckpt_path=ckpt_path,
             delta_weights=delta_weights,
             load_ckpt_class_head=load_ckpt_class_head,
-            num_shared_classes=num_shared_classes,
         )
 
         self.src_to_shared_name = src_to_shared
