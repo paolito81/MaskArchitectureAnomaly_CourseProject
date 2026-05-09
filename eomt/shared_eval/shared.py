@@ -196,3 +196,17 @@ COCO_TO_SHARED = {
     COCO_LABEL_TO_ID["bicycle"]: 5,
     COCO_LABEL_TO_ID["traffic light"]: 6,
 }
+
+
+def remap_target_ids(target, id_map, ignore_index=255):
+    remapped = target.new_full(target.shape, ignore_index)
+    for src_id, dst_id in id_map.items():
+        remapped[src_id == target] = dst_id
+    return remapped
+
+
+def remap_logits(logits, id_map):
+    shared = logits.new_zeros(...)
+    for src_id, dst_id in id_map.items():
+        shared[dst_id] += logits[src_id]
+    return shared
