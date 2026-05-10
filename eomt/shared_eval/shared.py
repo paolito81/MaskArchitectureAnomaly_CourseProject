@@ -177,33 +177,33 @@ SHARED_CLASSES = [
     "traffic light",
 ]
 
-SHARED_LABEL_TO_ID = {label: id for id, label in enumerate(SHARED_CLASSES)}
+SHARED_NAME_TO_ID = {label: idx for idx, label in enumerate(SHARED_CLASSES)}
 
 CITYSCAPES_TO_SHARED = {
-    CITYSCAPES_LABEL_TO_ID["person"]: 0,
-    CITYSCAPES_LABEL_TO_ID["car"]: 1,
-    CITYSCAPES_LABEL_TO_ID["truck"]: 2,
-    CITYSCAPES_LABEL_TO_ID["bus"]: 3,
-    CITYSCAPES_LABEL_TO_ID["motorcycle"]: 4,
-    CITYSCAPES_LABEL_TO_ID["bicycle"]: 5,
-    CITYSCAPES_LABEL_TO_ID["traffic light"]: 6,
+    CITYSCAPES_LABEL_TO_ID["person"]: SHARED_NAME_TO_ID["person"],
+    CITYSCAPES_LABEL_TO_ID["car"]: SHARED_NAME_TO_ID["car"],
+    CITYSCAPES_LABEL_TO_ID["truck"]: SHARED_NAME_TO_ID["truck"],
+    CITYSCAPES_LABEL_TO_ID["bus"]: SHARED_NAME_TO_ID["bus"],
+    CITYSCAPES_LABEL_TO_ID["motorcycle"]: SHARED_NAME_TO_ID["motorcycle"],
+    CITYSCAPES_LABEL_TO_ID["bicycle"]: SHARED_NAME_TO_ID["bicycle"],
+    CITYSCAPES_LABEL_TO_ID["traffic light"]: SHARED_NAME_TO_ID["traffic light"],
 }
 
 COCO_TO_SHARED = {
-    COCO_LABEL_TO_ID["person"]: 0,
-    COCO_LABEL_TO_ID["car"]: 1,
-    COCO_LABEL_TO_ID["truck"]: 2,
-    COCO_LABEL_TO_ID["bus"]: 3,
-    COCO_LABEL_TO_ID["motorcycle"]: 4,
-    COCO_LABEL_TO_ID["bicycle"]: 5,
-    COCO_LABEL_TO_ID["traffic light"]: 6,
+    COCO_LABEL_TO_ID["person"]: SHARED_NAME_TO_ID["person"],
+    COCO_LABEL_TO_ID["car"]: SHARED_NAME_TO_ID["car"],
+    COCO_LABEL_TO_ID["truck"]: SHARED_NAME_TO_ID["truck"],
+    COCO_LABEL_TO_ID["bus"]: SHARED_NAME_TO_ID["bus"],
+    COCO_LABEL_TO_ID["motorcycle"]: SHARED_NAME_TO_ID["motorcycle"],
+    COCO_LABEL_TO_ID["bicycle"]: SHARED_NAME_TO_ID["bicycle"],
+    COCO_LABEL_TO_ID["traffic light"]: SHARED_NAME_TO_ID["traffic light"],
 }
 
 
-def remap_target_ids(target, id_map, ignore_index=255):
+def remap_target_ids(target, id_map, ignore_index=IGNORE_INDEX):
     remapped = target.new_full(target.shape, ignore_index)
     for src_id, dst_id in id_map.items():
-        remapped[src_id == target] = dst_id
+        remapped[target == src_id] = dst_id
     return remapped
 
 
