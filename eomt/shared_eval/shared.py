@@ -138,7 +138,7 @@ COCO_ID_TO_LABEL = {
     "132": "rug-merged",
 }
 
-COCO_LABEL_TO_ID = {label: id for id, label in COCO_ID_TO_LABEL.items()}
+COCO_LABEL_TO_ID = {label: int(id) for id, label in COCO_ID_TO_LABEL.items()}
 
 CITYSCAPES_ID_TO_LABEL = {
     "0": "road",
@@ -162,7 +162,9 @@ CITYSCAPES_ID_TO_LABEL = {
     "18": "bicycle",
 }
 
-CITYSCAPES_LABEL_TO_ID = {label: id for id, label in CITYSCAPES_ID_TO_LABEL.items()}
+CITYSCAPES_LABEL_TO_ID = {
+    label: int(id) for id, label in CITYSCAPES_ID_TO_LABEL.items()
+}
 
 
 SHARED_CLASSES = [
