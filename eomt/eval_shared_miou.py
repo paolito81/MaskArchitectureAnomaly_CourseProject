@@ -334,13 +334,18 @@ def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None
                 targets, IGNORE_INDEX
             )
 
-            for sample_idx, (logit, target) in enumerate(zip(logits, per_pixel_targets)):
+            for sample_idx, (logit, target) in enumerate(
+                zip(logits, per_pixel_targets)
+            ):
                 shared_logits = remap_logits(logit, src_to_shared, num_shared_classes)
                 shared_target = remap_target_ids(
                     target, CITYSCAPES_TO_SHARED, IGNORE_INDEX
                 )
                 metric.update(shared_logits[None], shared_target[None])
                 shared_pred = shared_logits.argmax(dim=0)
+                shared_pred_vis = shared_pred.clone()
+                shared_pred_vis[shared_target == IGNORE_INDEX] = IGNORE_INDEX
+
                 update_confusion_matrix(confusion, shared_pred, shared_target)
                 ignored_pixels += int((shared_target == IGNORE_INDEX).sum().item())
                 valid_pixels += int((shared_target != IGNORE_INDEX).sum().item())
@@ -348,7 +353,7 @@ def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None
                     example = {
                         "img": imgs[sample_idx].detach().cpu(),
                         "target": shared_target.detach().cpu(),
-                        "pred": shared_pred.detach().cpu(),
+                        "pred": shared_pred_vis.detach().cpu(),
                     }
                 processed += 1
 
