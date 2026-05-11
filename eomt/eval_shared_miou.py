@@ -3,8 +3,11 @@ import importlib
 import inspect
 from pathlib import Path
 
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.nn.functional as F
+import wandb
 import yaml
 from torch.amp import autocast
 from torchmetrics.classification import MulticlassJaccardIndex
@@ -63,6 +66,22 @@ def parse_args():
         type=int,
         default=None,
         help="Optional max number of validation images to process for debugging.",
+    )
+    parser.add_argument(
+        "--wandb-mode",
+        choices=["disabled", "online", "offline"],
+        default="disabled",
+        help="Enable W&B logging for the standalone evaluator.",
+    )
+    parser.add_argument(
+        "--wandb-project",
+        default=None,
+        help="Optional W&B project override. Defaults to the config logger project if present.",
+    )
+    parser.add_argument(
+        "--wandb-name",
+        default=None,
+        help="Optional W&B run name override. Defaults to the config logger name if present.",
     )
     return parser.parse_args()
 
@@ -202,6 +221,73 @@ def compute_iou_from_confusion(confusion: torch.Tensor):
     return iou, gt_support, pred_support
 
 
+def init_wandb_run(config: dict, args):
+    if args.wandb_mode == "disabled":
+        return None
+
+    logger_cfg = config.get("trainer", {}).get("logger", {})
+    init_args = logger_cfg.get("init_args", {})
+    project = args.wandb_project or init_args.get("project", "eomt")
+    name = args.wandb_name or init_args.get("name", "shared_eval")
+
+    run = wandb.init(
+        project=project,
+        name=name,
+        mode=args.wandb_mode,
+        config={
+            "config_path": args.config,
+            "checkpoint": args.ckpt,
+            "cityscapes_path": args.cityscapes_path,
+            "shared_classes": SHARED_CLASSES,
+            "src_label_space": args.src_label_space,
+            "masked_attn_enabled": args.masked_attn_enabled,
+        },
+    )
+    run.log_code(
+        ".",
+        include_fn=lambda path: path.endswith(".py") or path.endswith(".yaml"),
+    )
+    return run
+
+
+def make_example_figure(img: torch.Tensor, target: torch.Tensor, pred: torch.Tensor):
+    img_np = img.detach().cpu().numpy().transpose(1, 2, 0)
+    target_np = target.detach().cpu().numpy()
+    pred_np = pred.detach().cpu().numpy()
+
+    unique_classes = np.unique(
+        np.concatenate(
+            [
+                np.unique(target_np[target_np != IGNORE_INDEX]),
+                np.unique(pred_np),
+            ]
+        )
+    )
+    colors = plt.get_cmap("tab20", max(len(unique_classes), 1))(
+        np.linspace(0, 1, max(len(unique_classes), 1))
+    )
+    color_map = {cls_id: colors[i] for i, cls_id in enumerate(unique_classes)}
+    color_map[IGNORE_INDEX] = np.array([0.0, 0.0, 0.0, 1.0])
+
+    def colorize(mask):
+        out = np.zeros((*mask.shape, 4), dtype=np.float32)
+        for cls_id, color in color_map.items():
+            out[mask == cls_id] = color
+        return out
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    axes[0].imshow(img_np)
+    axes[0].set_title("Image")
+    axes[1].imshow(colorize(target_np))
+    axes[1].set_title("Shared GT")
+    axes[2].imshow(colorize(pred_np))
+    axes[2].set_title("Shared Pred")
+    for ax in axes:
+        ax.axis("off")
+    plt.tight_layout()
+    return fig
+
+
 def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None):
     num_shared_classes = len(SHARED_CLASSES)
     metric = MulticlassJaccardIndex(
@@ -214,6 +300,7 @@ def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None
     )
     ignored_pixels = 0
     valid_pixels = 0
+    example = None
 
     processed = 0
     use_autocast = str(device).startswith("cuda")
@@ -247,7 +334,7 @@ def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None
                 targets, IGNORE_INDEX
             )
 
-            for logit, target in zip(logits, per_pixel_targets):
+            for sample_idx, (logit, target) in enumerate(zip(logits, per_pixel_targets)):
                 shared_logits = remap_logits(logit, src_to_shared, num_shared_classes)
                 shared_target = remap_target_ids(
                     target, CITYSCAPES_TO_SHARED, IGNORE_INDEX
@@ -257,6 +344,12 @@ def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None
                 update_confusion_matrix(confusion, shared_pred, shared_target)
                 ignored_pixels += int((shared_target == IGNORE_INDEX).sum().item())
                 valid_pixels += int((shared_target != IGNORE_INDEX).sum().item())
+                if example is None:
+                    example = {
+                        "img": imgs[sample_idx].detach().cpu(),
+                        "target": shared_target.detach().cpu(),
+                        "pred": shared_pred.detach().cpu(),
+                    }
                 processed += 1
 
                 if limit is not None and processed >= limit:
@@ -279,6 +372,7 @@ def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None
         "pred_support": pred_support,
         "ignored_pixels": ignored_pixels,
         "valid_pixels": valid_pixels,
+        "example": example,
     }
 
 
@@ -288,6 +382,7 @@ def main():
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
+    wandb_run = init_wandb_run(config, args)
     src_to_shared = infer_source_mapping(config, args.src_label_space)
     loader = build_cityscapes_loader(
         cityscapes_path=args.cityscapes_path,
@@ -352,6 +447,39 @@ def main():
     print(f"\nShared mIoU: {mean_iou.item() * 100:.2f}")
     print("\nConfusion matrix (rows=GT, cols=Pred):")
     print(results["confusion"].numpy())
+
+    if wandb_run is not None:
+        log_dict = {
+            "metrics/shared_iou_all": mean_iou.item(),
+            "audit/valid_pixels": results["valid_pixels"],
+            "audit/ignored_pixels": results["ignored_pixels"],
+            "audit/ignored_ratio": ignored_ratio,
+        }
+        for idx, (class_name, iou, gt_count, pred_count) in enumerate(
+            zip(
+                SHARED_CLASSES,
+                per_class_iou.tolist(),
+                gt_support.tolist(),
+                pred_support.tolist(),
+            )
+        ):
+            safe_name = class_name.replace(" ", "_")
+            log_dict[f"metrics/shared_iou_class_{idx}"] = iou
+            log_dict[f"metrics/shared_iou/{safe_name}"] = iou
+            log_dict[f"audit/gt_pixels/{safe_name}"] = gt_count
+            log_dict[f"audit/pred_pixels/{safe_name}"] = pred_count
+        wandb.log(log_dict)
+
+        if results["example"] is not None:
+            fig = make_example_figure(
+                results["example"]["img"],
+                results["example"]["target"],
+                results["example"]["pred"],
+            )
+            wandb.log({"qualitative/shared_eval_example": wandb.Image(fig)})
+            plt.close(fig)
+
+        wandb_run.finish()
 
 
 if __name__ == "__main__":
