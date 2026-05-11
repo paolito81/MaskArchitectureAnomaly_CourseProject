@@ -177,12 +177,43 @@ def move_targets_to_device(targets, device: str):
     return moved
 
 
+def update_confusion_matrix(
+    confusion: torch.Tensor, pred: torch.Tensor, target: torch.Tensor
+):
+    valid = target != IGNORE_INDEX
+    if not valid.any():
+        return
+
+    target_valid = target[valid].to(torch.int64)
+    pred_valid = pred[valid].to(torch.int64)
+    num_classes = confusion.shape[0]
+    flat = target_valid * num_classes + pred_valid
+    confusion += torch.bincount(flat, minlength=num_classes * num_classes).reshape(
+        num_classes, num_classes
+    )
+
+
+def compute_iou_from_confusion(confusion: torch.Tensor):
+    tp = torch.diag(confusion)
+    gt_support = confusion.sum(dim=1)
+    pred_support = confusion.sum(dim=0)
+    denom = gt_support + pred_support - tp
+    iou = torch.where(denom > 0, tp.float() / denom.float(), torch.nan)
+    return iou, gt_support, pred_support
+
+
 def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None):
+    num_shared_classes = len(SHARED_CLASSES)
     metric = MulticlassJaccardIndex(
-        num_classes=len(SHARED_CLASSES),
+        num_classes=num_shared_classes,
         average=None,
         ignore_index=IGNORE_INDEX,
     ).to(device)
+    confusion = torch.zeros(
+        (num_shared_classes, num_shared_classes), dtype=torch.int64, device=device
+    )
+    ignored_pixels = 0
+    valid_pixels = 0
 
     processed = 0
     use_autocast = str(device).startswith("cuda")
@@ -217,11 +248,15 @@ def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None
             )
 
             for logit, target in zip(logits, per_pixel_targets):
-                shared_logits = remap_logits(logit, src_to_shared, len(SHARED_CLASSES))
+                shared_logits = remap_logits(logit, src_to_shared, num_shared_classes)
                 shared_target = remap_target_ids(
                     target, CITYSCAPES_TO_SHARED, IGNORE_INDEX
                 )
                 metric.update(shared_logits[None], shared_target[None])
+                shared_pred = shared_logits.argmax(dim=0)
+                update_confusion_matrix(confusion, shared_pred, shared_target)
+                ignored_pixels += int((shared_target == IGNORE_INDEX).sum().item())
+                valid_pixels += int((shared_target != IGNORE_INDEX).sum().item())
                 processed += 1
 
                 if limit is not None and processed >= limit:
@@ -232,7 +267,19 @@ def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None
 
     per_class_iou = metric.compute()
     mean_iou = per_class_iou.mean()
-    return per_class_iou, mean_iou, processed
+    confusion = confusion.cpu()
+    confusion_iou, gt_support, pred_support = compute_iou_from_confusion(confusion)
+    return {
+        "per_class_iou": per_class_iou.cpu(),
+        "mean_iou": mean_iou.cpu(),
+        "processed": processed,
+        "confusion": confusion,
+        "confusion_iou": confusion_iou,
+        "gt_support": gt_support,
+        "pred_support": pred_support,
+        "ignored_pixels": ignored_pixels,
+        "valid_pixels": valid_pixels,
+    }
 
 
 def main():
@@ -262,7 +309,7 @@ def main():
     print(f"Evaluating on Cityscapes val from: {args.cityscapes_path}")
     print(f"Shared classes ({len(SHARED_CLASSES)}): {SHARED_CLASSES}")
 
-    per_class_iou, mean_iou, processed = evaluate(
+    results = evaluate(
         model=model,
         loader=loader,
         src_to_shared=src_to_shared,
@@ -270,11 +317,41 @@ def main():
         limit=args.limit,
     )
 
+    per_class_iou = results["per_class_iou"]
+    mean_iou = results["mean_iou"]
+    confusion_iou = results["confusion_iou"]
+    gt_support = results["gt_support"]
+    pred_support = results["pred_support"]
+    processed = results["processed"]
+    total_pixels = results["ignored_pixels"] + results["valid_pixels"]
+    ignored_ratio = (
+        results["ignored_pixels"] / total_pixels if total_pixels > 0 else float("nan")
+    )
+
     print(f"\nProcessed {processed} validation images")
+    print(
+        f"Valid pixels: {results['valid_pixels']:,} | "
+        f"Ignored pixels: {results['ignored_pixels']:,} | "
+        f"Ignored ratio: {ignored_ratio * 100:.2f}%"
+    )
     print("Per-class IoU:")
     for class_name, iou in zip(SHARED_CLASSES, per_class_iou.tolist()):
         print(f"  {class_name:15s} {iou * 100:6.2f}")
+    print("\nPer-class support and confusion-derived IoU:")
+    for class_name, iou, gt_count, pred_count in zip(
+        SHARED_CLASSES,
+        confusion_iou.tolist(),
+        gt_support.tolist(),
+        pred_support.tolist(),
+    ):
+        iou_str = "nan" if iou != iou else f"{iou * 100:6.2f}"
+        print(
+            f"  {class_name:15s} IoU={iou_str:>6s} | "
+            f"GT pixels={gt_count:9d} | Pred pixels={pred_count:9d}"
+        )
     print(f"\nShared mIoU: {mean_iou.item() * 100:.2f}")
+    print("\nConfusion matrix (rows=GT, cols=Pred):")
+    print(results["confusion"].numpy())
 
 
 if __name__ == "__main__":
