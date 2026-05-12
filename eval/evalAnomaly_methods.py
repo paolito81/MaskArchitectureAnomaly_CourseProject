@@ -31,7 +31,7 @@ random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
 torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.benchmark = False      # Ensures reproducibility at the cost of some performance.
 
 # ──────────────────────────────────────────────────────────────
 # Constants
@@ -391,7 +391,7 @@ def evaluate(args):
     with open(results_path, "a") as f:
         f.write(
             f"\n{args.method.upper():12s} | {dataset_name:20s} | "
-            f"AUPRC: {auprc*100:.2f}% | FPR@95: {fpr95*100:.2f}%\n"
+            f"AUPRC: {auprc*100:.2f}% | FPR@95: {fpr95*100:.2f}%"
         )
     print(f"[OK] Results saved to: {results_path}")
 
