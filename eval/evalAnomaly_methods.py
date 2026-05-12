@@ -121,15 +121,17 @@ def compute_maxlogit(logits: torch.Tensor) -> np.ndarray:
 
 def compute_max_entropy(logits: torch.Tensor) -> np.ndarray:
     """
-    MaxEntropy — Shannon entropy of the softmax distribution.
+    MaxEntropy — Normalized Shannon entropy of the softmax distribution.
 
-    Formula:  H(x) = -sum_c [ p_c * log(p_c) ]
-              score(x) = H(x)
+    Formula:   H(x) = -sum_c [ p_c * log(p_c) ] / log(C)
+               score(x) = H(x)
 
     Intuition:
         Entropy measures how "spread" the probability distribution is.
-        Known object → concentrated distribution → low entropy → low score.
-        Unknown object → spread distribution → high entropy → high score.
+        Normalized to [0, 1] by dividing by the maximum possible entropy (log(C)).
+        
+        Known object   → concentrated distribution → entropy ~0 → low score.
+        Unknown object → spread/uniform distribution → entropy ~1 → high score.
 
     Numerical stability:
         log(0) is undefined. We add a small epsilon (1e-10) inside the log
@@ -138,7 +140,7 @@ def compute_max_entropy(logits: torch.Tensor) -> np.ndarray:
     Args:
         logits: raw model output, shape [1, C, H, W], on GPU
     Returns:
-        anomaly_map: numpy array [H, W], higher = more anomalous
+        anomaly_map: numpy array [H, W], range [0, 1], higher = more anomalous
     """
     # Convert logits to probabilities
     probs = torch.softmax(logits, dim=1)                      # [1, C, H, W]
@@ -148,7 +150,10 @@ def compute_max_entropy(logits: torch.Tensor) -> np.ndarray:
     log_probs = torch.log(probs + 1e-10)                      # [1, C, H, W]
     entropy = -(probs * log_probs).sum(dim=1)                 # [1, H, W]
 
-    anomaly_map = entropy.squeeze(0)                          # [H, W]
+    # NORMALIZATION: Divide by log(C) to bound the result between 0 and 1
+    normalized_entropy = entropy / torch.log(torch.tensor(NUM_CLASSES, device=entropy.device))
+
+    anomaly_map = normalized_entropy.squeeze(0)                          # [H, W]
 
     return anomaly_map.cpu().numpy()
 
