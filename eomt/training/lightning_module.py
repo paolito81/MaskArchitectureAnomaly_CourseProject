@@ -113,6 +113,7 @@ class LightningModule(lightning.LightningModule):
         ).tolist()
 
         for name, param in reversed(list(self.named_parameters())):
+            print(name, param.requires_grad)
             lr = self.lr
 
             if name.replace("network.encoder.backbone.", "") in encoder_param_names:
