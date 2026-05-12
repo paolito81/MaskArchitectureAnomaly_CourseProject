@@ -116,6 +116,15 @@ class LightningModule(lightning.LightningModule):
             print(name, param.requires_grad)
             lr = self.lr
 
+            if (
+                name.startswith("network.class_head")
+                or name.startswith("network.mask_head")
+                or name.startswith("network.upscale")
+            ):
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
+
             if name.replace("network.encoder.backbone.", "") in encoder_param_names:
                 name_list = name.split(".")
 
