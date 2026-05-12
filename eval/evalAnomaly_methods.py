@@ -385,7 +385,7 @@ def evaluate(args):
     results_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results.txt")
     with open(results_path, "a") as f:
         f.write(
-            f"{args.method.upper():12s} | {dataset_name:20s} | "
+            f"\n{args.method.upper():12s} | {dataset_name:20s} | "
             f"AUPRC: {auprc*100:.2f}% | FPR@95: {fpr95*100:.2f}%\n"
         )
     print(f"[OK] Results saved to: {results_path}")
