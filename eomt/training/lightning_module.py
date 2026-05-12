@@ -125,6 +125,9 @@ class LightningModule(lightning.LightningModule):
             else:
                 param.requires_grad = False
 
+            if not param.requires_grad:
+                continue
+
             if name.replace("network.encoder.backbone.", "") in encoder_param_names:
                 name_list = name.split(".")
 
