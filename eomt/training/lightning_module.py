@@ -113,7 +113,6 @@ class LightningModule(lightning.LightningModule):
         ).tolist()
 
         for name, param in reversed(list(self.named_parameters())):
-            print(name, param.requires_grad)
             lr = self.lr
 
             if (
@@ -124,6 +123,8 @@ class LightningModule(lightning.LightningModule):
                 param.requires_grad = True
             else:
                 param.requires_grad = False
+
+            print(name, param.requires_grad)
 
             if not param.requires_grad:
                 continue
