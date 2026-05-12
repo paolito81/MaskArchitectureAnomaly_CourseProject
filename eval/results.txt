@@ -5,32 +5,20 @@
 
     AUPRC score:13.194873989049796   FPR@TPR95:97.01270448916142
     AUPRC score:13.194873989049796   FPR@TPR95:97.01270448916142
+
+
 MSP          | RoadAnomaly          | AUPRC: 12.42% | FPR@95: 82.58%
-
 MAXLOGIT     | RoadAnomaly          | AUPRC: 15.58% | FPR@95: 73.26%
-
 MAXENTROPY   | RoadAnomaly          | AUPRC: 12.67% | FPR@95: 82.75%
-
-MSP          | RoadAnomaly21        | AUPRC: 29.09% | FPR@95: 62.55%
-
+MSP          | RoadAnomaly21        | AUPRC: 29.09% | FPR@95: 62.56%
 MAXLOGIT     | RoadAnomaly21        | AUPRC: 38.31% | FPR@95: 59.35%
-
-MAXENTROPY   | RoadAnomaly21        | AUPRC: 30.96% | FPR@95: 62.66%
-
+MAXENTROPY   | RoadAnomaly21        | AUPRC: 30.96% | FPR@95: 62.67%
 MSP          | RoadObsticle21       | AUPRC: 2.71% | FPR@95: 65.27%
-
-MAXLOGIT     | RoadObsticle21       | AUPRC: 4.63% | FPR@95: 48.40%
-
-MAXENTROPY   | RoadObsticle21       | AUPRC: 3.05% | FPR@95: 65.87%
-
-MSP          | FS_LostFound_full    | AUPRC: 1.75% | FPR@95: 50.66%
-
-MAXLOGIT     | FS_LostFound_full    | AUPRC: 3.30% | FPR@95: 45.55%
-
-MAXENTROPY   | FS_LostFound_full    | AUPRC: 2.58% | FPR@95: 50.19%
-
+MAXLOGIT     | RoadObsticle21       | AUPRC: 4.63% | FPR@95: 48.48%
+MAXENTROPY   | RoadObsticle21       | AUPRC: 3.04% | FPR@95: 65.94%
+MSP          | FS_LostFound_full    | AUPRC: 1.75% | FPR@95: 50.63%
+MAXLOGIT     | FS_LostFound_full    | AUPRC: 3.30% | FPR@95: 45.51%
+MAXENTROPY   | FS_LostFound_full    | AUPRC: 2.58% | FPR@95: 50.20%
 MSP          | fs_static            | AUPRC: 7.47% | FPR@95: 41.84%
-
 MAXLOGIT     | fs_static            | AUPRC: 9.50% | FPR@95: 40.31%
-
 MAXENTROPY   | fs_static            | AUPRC: 8.84% | FPR@95: 41.55%
