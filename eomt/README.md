@@ -89,3 +89,39 @@ This command evaluates the same `EoMT-L` model using 4 GPUs with a batch size of
 🔧 Replace `/path/to/pytorch_model.bin` with the path to the checkpoint to evaluate.
 
 A [notebook](inference.ipynb) is available for quick inference and visualization with auto-downloaded pre-trained models.
+
+## Shared classes pipeline
+
+These are the commands to run for the shared classes pipeline. You can find the list of shared classes in the file `shared.py`.
+
+### COCO
+
+To evaluate the COCO trained model on the Cityscapes dataset, run:
+
+```bash
+python3 eval_shared_miou.py \
+  --config configs/dinov2/coco/panoptic/eomt_base_640_2x.yaml \
+  --ckpt /path/to/coco_ckpt \
+  --cityscapes-path /path/to/cityscapes \
+  --device cuda:0 \
+  --batch-size 1 \
+  --num-workers 2 \
+  --no-masked-attn-enabled \
+  --wandb-mode online
+```
+
+### Cityscapes
+
+To evaluate the Cityscapes trained model on the Cityscapes dataset, run:
+
+```bash
+python3 eval_shared_miou.py \
+  --config configs/dinov2/coco/panoptic/eomt_base_640.yaml \
+  --ckpt /path/to/cityscapes_ckpt \
+  --cityscapes-path /path/to/cityscapes \
+  --device cuda:0 \
+  --batch-size 1 \
+  --num-workers 2 \
+  --no-masked-attn-enabled \
+  --wandb-mode online
+```
