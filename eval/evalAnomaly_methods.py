@@ -204,12 +204,17 @@ def get_gt_path(image_path: str) -> str:
 
 def load_gt_mask(gt_path: str) -> np.ndarray:
     """
-    Load and remap a ground truth mask to the standard format:
-        0   = in-distribution (normal pixel)
-        1   = out-of-distribution (anomaly pixel)
-        255 = ignore
+    Load and remap a ground truth mask to standard binary format:
+        0   = in-distribution (normal road scene)
+        1   = out-of-distribution (anomaly)
+        255 = ignore (excluded from metric computation)
 
-    Each dataset uses different label conventions — we normalize here.
+    Dataset-specific label conventions:
+        - RoadAnomaly        : 0/1 = normal, 2 = anomaly      → remap 2 → 1
+        - RoadAnomaly21      : 0 = normal, 1 = anomaly, 255 = ignore (standard)
+        - RoadObsticle21     : 0 = normal, 1 = anomaly, 255 = ignore (standard)
+        - FS_LostFound_full  : 0 = normal, 1 = anomaly, 255 = ignore (standard)
+        - fs_static          : 0 = normal, 1 = anomaly, 255 = ignore (standard)
 
     Args:
         gt_path: path to the GT mask file
@@ -220,15 +225,10 @@ def load_gt_mask(gt_path: str) -> np.ndarray:
     mask = target_transform(mask)
     ood_gts = np.array(mask)
 
-    # RoadAnomaly: class 2 = anomaly, 0 and 1 = normal
+    # Only RoadAnomaly (older standalone dataset) needs remapping
+    # RoadAnomaly21 must be excluded from the check because it uses standard format
     if "RoadAnomaly" in gt_path and "RoadAnomaly21" not in gt_path:
         ood_gts = np.where(ood_gts == 2, 1, ood_gts)
-
-    # LostAndFound remapping (if dataset name contains LostAndFound)
-    if "LostAndFound" in gt_path:
-        ood_gts = np.where(ood_gts == 0, IGNORE_LABEL, ood_gts)
-        ood_gts = np.where(ood_gts == 1, 0, ood_gts)
-        ood_gts = np.where((ood_gts > 1) & (ood_gts < 201), 1, ood_gts)
 
     return ood_gts
 
