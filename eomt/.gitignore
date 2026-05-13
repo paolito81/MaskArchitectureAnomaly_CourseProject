@@ -181,6 +181,3 @@ cython_debug/
 
 # Report (for now)
 Report/
-
-shared_eval.ipynb
-COCO_finetuning.ipynb
