@@ -181,6 +181,7 @@ cython_debug/
 
 # Report (for now)
 Report/
-eomt/colab/
 eomt/shared_eval/shared_eval.ipynb
 eomt/COCO_finetuning.ipynb
+
+.DS_Store
