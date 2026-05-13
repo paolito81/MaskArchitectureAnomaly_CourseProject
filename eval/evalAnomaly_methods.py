@@ -210,7 +210,7 @@ def load_gt_mask(gt_path: str) -> np.ndarray:
         255 = ignore (excluded from metric computation)
 
     Dataset-specific label conventions:
-        - RoadAnomaly        : 0/1 = normal, 2 = anomaly      → remap 2 → 1
+        - RoadAnomaly        : 0 = normal, 2 = anomaly      → remap 2 → 1
         - RoadAnomaly21      : 0 = normal, 1 = anomaly, 255 = ignore (standard)
         - RoadObsticle21     : 0 = normal, 1 = anomaly, 255 = ignore (standard)
         - FS_LostFound_full  : 0 = normal, 1 = anomaly, 255 = ignore (standard)
