@@ -83,6 +83,12 @@ def parse_args():
         default=None,
         help="Optional W&B run name override. Defaults to the config logger name if present.",
     )
+    parser.add_argument(
+        "--example-min-classes",
+        type=int,
+        default=4,
+        help="Minimum number of shared ground-truth classes required before an image is kept as the qualitative example.",
+    )
     return parser.parse_args()
 
 
@@ -297,7 +303,19 @@ def make_example_figure(img: torch.Tensor, target: torch.Tensor, pred: torch.Ten
     return fig
 
 
-def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None):
+def count_valid_shared_classes(mask: torch.Tensor):
+    valid_classes = torch.unique(mask[mask != IGNORE_INDEX])
+    return int(valid_classes.numel())
+
+
+def evaluate(
+    model,
+    loader,
+    src_to_shared,
+    device: str,
+    limit: int | None = None,
+    example_min_classes: int = 4,
+):
     num_shared_classes = len(SHARED_CLASSES)
     metric = MulticlassJaccardIndex(
         num_classes=num_shared_classes,
@@ -310,6 +328,7 @@ def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None
     ignored_pixels = 0
     valid_pixels = 0
     example = None
+    best_example = None
 
     processed = 0
     use_autocast = str(device).startswith("cuda")
@@ -358,12 +377,20 @@ def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None
                 update_confusion_matrix(confusion, shared_pred, shared_target)
                 ignored_pixels += int((shared_target == IGNORE_INDEX).sum().item())
                 valid_pixels += int((shared_target != IGNORE_INDEX).sum().item())
-                if example is None:
-                    example = {
-                        "img": imgs[sample_idx].detach().cpu(),
-                        "target": shared_target.detach().cpu(),
-                        "pred": shared_pred_vis.detach().cpu(),
-                    }
+                num_present_classes = count_valid_shared_classes(shared_target)
+                candidate_example = {
+                    "img": imgs[sample_idx].detach().cpu(),
+                    "target": shared_target.detach().cpu(),
+                    "pred": shared_pred_vis.detach().cpu(),
+                    "num_present_classes": num_present_classes,
+                }
+                if (
+                    best_example is None
+                    or num_present_classes > best_example["num_present_classes"]
+                ):
+                    best_example = candidate_example
+                if example is None and num_present_classes >= example_min_classes:
+                    example = candidate_example
                 processed += 1
 
                 if limit is not None and processed >= limit:
@@ -371,6 +398,9 @@ def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None
 
             if limit is not None and processed >= limit:
                 break
+
+    if example is None:
+        example = best_example
 
     per_class_iou = metric.compute()
     mean_iou = per_class_iou.mean()
