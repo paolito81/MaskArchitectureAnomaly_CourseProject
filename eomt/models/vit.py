@@ -3,6 +3,7 @@
 # Licensed under the MIT License.
 # ---------------------------------------------------------------
 
+#VIT STANDS FOR VISION TRANSFORMER, WHICH IS A TYPE OF NEURAL NETWORK ARCHITECTURE DESIGNED FOR IMAGE RECOGNITION TASKS.
 
 from typing import Optional
 import torch

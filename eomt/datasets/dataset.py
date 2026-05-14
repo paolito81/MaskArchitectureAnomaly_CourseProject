@@ -41,9 +41,13 @@ class Dataset(torch.utils.data.Dataset):
     ):
         self.zip_path = zip_path
         self.target_parser = target_parser
-        self.transforms = transforms
+        self.transforms = transforms #data augmentation transforms for training and evaluation
         self.only_annotations_json = only_annotations_json
-        self.stuff_classes = stuff_classes
+        #stuff classes are used in panoptic segmentation to distinguish between "thing" classes (countable objects) and "stuff" classes 
+        #(amorphous regions). The stuff_classes parameter is a list of class IDs that correspond to "stuff" classes in the dataset.
+        #This information can be used by the target_parser function to handle "stuff" classes differently during the parsing of target annotations, 
+        #such as applying different processing or ignoring them during certain stages of training and evaluation.
+        self.stuff_classes = stuff_classes 
         self.target_zip_path = target_zip_path
         self.target_zip_path_in_zip = target_zip_path_in_zip
         self.target_instance_zip_path = target_instance_zip_path
@@ -55,9 +59,16 @@ class Dataset(torch.utils.data.Dataset):
         self.target_instance_zip = None
         img_zip, target_zip, target_instance_zip = self._load_zips()
 
+
+
         self.labels_by_id = {}
         self.polygons_by_id = {}
         self.is_crowd_by_id = {}
+
+       
+       #json files for COCO dataset contain annotations that provide information about the images, 
+       #such as the category IDs for each instance and whether they are marked as "crowd" (indicating that they represent a group of objects rather than a single instance).
+        #The code reads the annotations from the JSON file and organizes this information into dictionaries (labels)
 
         if annotations_json_path_in_zip is not None:
             with zipfile.ZipFile(target_zip_path or zip_path) as outer_target_zip:
@@ -70,9 +81,11 @@ class Dataset(torch.utils.data.Dataset):
                 image["id"]: image["file_name"] for image in annotation_data["images"]
             }
 
+        # The code iterates through the annotations in the JSON file and populates the labels_by_id, polygons_by_id, and is_crowd_by_id dictionaries with the relevant information for each image.
             for annotation in annotation_data["annotations"]:
                 img_filename = image_id_to_file_name[annotation["image_id"]]
 
+            #converts the polygon annotations into binary masks for each instance in the COCO dataset based on their polygon annotations.
                 if "segments_info" in annotation:
                     self.labels_by_id[img_filename] = {
                         segment_info["id"]: segment_info["category_id"]
@@ -277,6 +290,15 @@ class Dataset(torch.utils.data.Dataset):
             and img_info.filename.endswith(img_stem_suffix + img_suffix)
             and not img_info.is_dir()
         )
+
+
+
+
+
+
+
+
+
 
     def __len__(self):
         return len(self.imgs)

@@ -1,3 +1,5 @@
+
+#first section 
 trainer:
   max_epochs: 107
   logger:
@@ -6,6 +8,8 @@ trainer:
       resume: allow
       project: "eomt"
       name: "cityscapes_semantic_eomt_base_640"
+
+
 model:
   class_path: training.mask_classification_semantic.MaskClassificationSemantic
   init_args:
