@@ -221,6 +221,15 @@ def compute_iou_from_confusion(confusion: torch.Tensor):
     return iou, gt_support, pred_support
 
 
+def normalize_confusion_rows(confusion: torch.Tensor):
+    row_sums = confusion.sum(dim=1, keepdim=True)
+    return torch.where(
+        row_sums > 0,
+        confusion.float() / row_sums.float(),
+        torch.zeros_like(confusion, dtype=torch.float32),
+    )
+
+
 def init_wandb_run(config: dict, args):
     if args.wandb_mode == "disabled":
         return None
@@ -367,11 +376,13 @@ def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None
     mean_iou = per_class_iou.mean()
     confusion = confusion.cpu()
     confusion_iou, gt_support, pred_support = compute_iou_from_confusion(confusion)
+    confusion_normalized = normalize_confusion_rows(confusion)
     return {
         "per_class_iou": per_class_iou.cpu(),
         "mean_iou": mean_iou.cpu(),
         "processed": processed,
         "confusion": confusion,
+        "confusion_normalized": confusion_normalized,
         "confusion_iou": confusion_iou,
         "gt_support": gt_support,
         "pred_support": pred_support,
@@ -452,6 +463,8 @@ def main():
     print(f"\nShared mIoU: {mean_iou.item() * 100:.2f}")
     print("\nConfusion matrix (rows=GT, cols=Pred):")
     print(results["confusion"].numpy())
+    print("\nNormalized confusion matrix (rows=GT, each row sums to 1):")
+    print(results["confusion_normalized"].numpy())
 
     if wandb_run is not None:
         log_dict = {
