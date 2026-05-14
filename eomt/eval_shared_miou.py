@@ -11,7 +11,6 @@ import wandb
 import yaml
 from torch.amp import autocast
 from torchmetrics.classification import MulticlassJaccardIndex
-from torchvision.datasets import Cityscapes
 
 from datasets.cityscapes_semantic import CityscapesSemantic
 from shared_eval.shared import (
@@ -31,14 +30,12 @@ def parse_args():
     parser.add_argument(
         "--config",
         required=True,
-        nargs="+",
-        help="One or more source model configs (e.g. COCO panoptic or Cityscapes semantic yaml).",
+        help="Path to the source model config (e.g. COCO panoptic or Cityscapes semantic yaml).",
     )
     parser.add_argument(
         "--ckpt",
         required=True,
-        nargs="+",
-        help="One or more checkpoints to evaluate. Must match the number of configs.",
+        help="Path to the checkpoint to evaluate.",
     )
     parser.add_argument(
         "--cityscapes-path",
@@ -63,13 +60,6 @@ def parse_args():
         choices=["auto", "coco", "cityscapes"],
         default="auto",
         help="Which mapping to use for model output channels.",
-    )
-    parser.add_argument(
-        "--paradigms",
-        nargs="+",
-        choices=["semantic", "instance", "panoptic"],
-        default=["semantic", "instance", "panoptic"],
-        help="Inference paradigms to evaluate for each checkpoint.",
     )
     parser.add_argument(
         "--limit",
@@ -134,36 +124,7 @@ def build_cityscapes_loader(cityscapes_path: str, batch_size: int, num_workers: 
     return data.val_dataloader()
 
 
-def get_cityscapes_stuff_classes(num_classes: int):
-    stuff_classes = []
-    for cls in Cityscapes.classes:
-        if cls.ignore_in_eval or cls.train_id < 0 or cls.train_id >= num_classes:
-            continue
-        if not cls.has_instances:
-            stuff_classes.append(cls.train_id)
-    return sorted(set(stuff_classes))
-
-
-def get_eval_model_class(paradigm: str):
-    paradigm_to_class_path = {
-        "semantic": "training.mask_classification_semantic.MaskClassificationSemantic",
-        "instance": "training.mask_classification_instance.MaskClassificationInstance",
-        "panoptic": "training.mask_classification_panoptic.MaskClassificationPanoptic",
-    }
-    return import_class(paradigm_to_class_path[paradigm])
-
-
-def filter_kwargs_for_constructor(cls, kwargs: dict):
-    signature = inspect.signature(cls.__init__)
-    return {k: v for k, v in kwargs.items() if k in signature.parameters}
-
-
-def build_model_from_config(
-    config: dict,
-    masked_attn_enabled: bool,
-    device: str,
-    paradigm: str,
-):
+def build_model_from_config(config: dict, masked_attn_enabled: bool, device: str):
     source_data_cls = import_class(config["data"]["class_path"])
     source_data_kwargs = config["data"].get("init_args", {})
     source_num_classes = source_data_kwargs.get(
@@ -194,22 +155,12 @@ def build_model_from_config(
         **network_kwargs,
     )
 
-    model_init_args = config["model"]["init_args"]
-    model_cls = get_eval_model_class(paradigm)
-    model_kwargs = {k: v for k, v in model_init_args.items() if k != "network"}
-    model_kwargs["attn_mask_annealing_enabled"] = model_init_args.get(
-        "attn_mask_annealing_enabled", False
-    )
+    model_cfg = config["model"]
+    model_cls = import_class(model_cfg["class_path"])
+    model_kwargs = {k: v for k, v in model_cfg["init_args"].items() if k != "network"}
 
-    if paradigm == "panoptic":
-        if "stuff_classes" in source_data_kwargs:
-            model_kwargs["stuff_classes"] = source_data_kwargs["stuff_classes"]
-        else:
-            model_kwargs["stuff_classes"] = get_cityscapes_stuff_classes(
-                source_num_classes
-            )
-
-    model_kwargs = filter_kwargs_for_constructor(model_cls, model_kwargs)
+    if "stuff_classes" in source_data_kwargs:
+        model_kwargs["stuff_classes"] = source_data_kwargs["stuff_classes"]
 
     model = model_cls(
         network=network,
@@ -284,13 +235,12 @@ def init_wandb_run(config: dict, args):
         name=name,
         mode=args.wandb_mode,
         config={
-            "config_paths": args.config,
-            "checkpoints": args.ckpt,
+            "config_path": args.config,
+            "checkpoint": args.ckpt,
             "cityscapes_path": args.cityscapes_path,
             "shared_classes": SHARED_CLASSES,
             "src_label_space": args.src_label_space,
             "masked_attn_enabled": args.masked_attn_enabled,
-            "paradigms": args.paradigms,
         },
     )
     run.log_code(
@@ -338,148 +288,7 @@ def make_example_figure(img: torch.Tensor, target: torch.Tensor, pred: torch.Ten
     return fig
 
 
-def compute_shared_target(targets):
-    per_pixel_targets = []
-
-    for target in targets:
-        per_pixel_target = target["labels"].new_full(
-            target["masks"].shape[-2:],
-            IGNORE_INDEX,
-            device=target["labels"].device,
-        )
-        for i, mask in enumerate(target["masks"]):
-            per_pixel_target[mask] = target["labels"][i]
-        per_pixel_targets.append(
-            remap_target_ids(per_pixel_target, CITYSCAPES_TO_SHARED, IGNORE_INDEX)
-        )
-
-    return per_pixel_targets
-
-
-def predict_semantic_shared(model, imgs, src_to_shared):
-    img_sizes = [img.shape[-2:] for img in imgs]
-    crops, origins = model.window_imgs_semantic(imgs)
-    mask_logits_per_layer, class_logits_per_layer = model(crops)
-    mask_logits = F.interpolate(
-        mask_logits_per_layer[-1],
-        model.img_size,
-        mode="bilinear",
-    )
-    crop_logits = model.to_per_pixel_logits_semantic(
-        mask_logits,
-        class_logits_per_layer[-1],
-    )
-    logits = model.revert_window_logits_semantic(crop_logits, origins, img_sizes)
-
-    return [
-        remap_logits(logit, src_to_shared, len(SHARED_CLASSES)) for logit in logits
-    ]
-
-
-def predict_instance_shared(model, imgs, src_to_shared):
-    img_sizes = [img.shape[-2:] for img in imgs]
-    transformed_imgs = model.resize_and_pad_imgs_instance_panoptic(imgs)
-    mask_logits_per_layer, class_logits_per_layer = model(transformed_imgs)
-    mask_logits = F.interpolate(
-        mask_logits_per_layer[-1],
-        model.img_size,
-        mode="bilinear",
-    )
-    mask_logits = model.revert_resize_and_pad_logits_instance_panoptic(
-        mask_logits, img_sizes
-    )
-
-    shared_logits_list = []
-    num_shared_classes = len(SHARED_CLASSES)
-    for sample_idx in range(len(mask_logits)):
-        scores = class_logits_per_layer[-1][sample_idx].softmax(dim=-1)[:, :-1]
-        labels = (
-            torch.arange(scores.shape[-1], device=model.device)
-            .unsqueeze(0)
-            .repeat(scores.shape[0], 1)
-            .flatten(0, 1)
-        )
-
-        top_k = min(model.eval_top_k_instances, scores.numel())
-        topk_scores, topk_indices = scores.flatten(0, 1).topk(top_k, sorted=False)
-        labels = labels[topk_indices]
-        topk_query_indices = topk_indices // scores.shape[-1]
-        topk_mask_logits = mask_logits[sample_idx][topk_query_indices]
-
-        shared_logits = topk_mask_logits.new_zeros(
-            (num_shared_classes, *topk_mask_logits.shape[-2:])
-        )
-        for query_mask_logits, label_id, score in zip(
-            topk_mask_logits,
-            labels.tolist(),
-            topk_scores.tolist(),
-        ):
-            if label_id not in src_to_shared:
-                continue
-            mask = query_mask_logits > 0
-            if not mask.any():
-                continue
-            dst_id = src_to_shared[label_id]
-            pixel_scores = query_mask_logits.sigmoid() * score
-            shared_logits[dst_id] = torch.maximum(shared_logits[dst_id], pixel_scores)
-
-        shared_logits_list.append(shared_logits)
-
-    return shared_logits_list
-
-
-def predict_panoptic_shared(model, imgs, src_to_shared):
-    img_sizes = [img.shape[-2:] for img in imgs]
-    transformed_imgs = model.resize_and_pad_imgs_instance_panoptic(imgs)
-    mask_logits_per_layer, class_logits_per_layer = model(transformed_imgs)
-    mask_logits = F.interpolate(
-        mask_logits_per_layer[-1],
-        model.img_size,
-        mode="bilinear",
-    )
-    mask_logits = model.revert_resize_and_pad_logits_instance_panoptic(
-        mask_logits, img_sizes
-    )
-    preds = model.to_per_pixel_preds_panoptic(
-        mask_logits,
-        class_logits_per_layer[-1],
-        model.stuff_classes,
-        model.mask_thresh,
-        model.overlap_thresh,
-    )
-
-    shared_logits_list = []
-    num_shared_classes = len(SHARED_CLASSES)
-    for pred in preds:
-        shared_logits = pred.new_zeros(
-            (num_shared_classes, pred.shape[0], pred.shape[1]), dtype=torch.float32
-        )
-        class_ids = pred[:, :, 0]
-        for src_id, dst_id in src_to_shared.items():
-            shared_logits[dst_id][class_ids == src_id] = 1.0
-        shared_logits_list.append(shared_logits)
-
-    return shared_logits_list
-
-
-def predict_shared_logits(model, imgs, src_to_shared, paradigm: str):
-    if paradigm == "semantic":
-        return predict_semantic_shared(model, imgs, src_to_shared)
-    if paradigm == "instance":
-        return predict_instance_shared(model, imgs, src_to_shared)
-    if paradigm == "panoptic":
-        return predict_panoptic_shared(model, imgs, src_to_shared)
-    raise ValueError(f"Unsupported paradigm: {paradigm}")
-
-
-def evaluate(
-    model,
-    loader,
-    src_to_shared,
-    device: str,
-    paradigm: str,
-    limit: int | None = None,
-):
+def evaluate(model, loader, src_to_shared, device: str, limit: int | None = None):
     num_shared_classes = len(SHARED_CLASSES)
     metric = MulticlassJaccardIndex(
         num_classes=num_shared_classes,
@@ -501,20 +310,37 @@ def evaluate(
             imgs = [img.to(device, non_blocking=True) for img in imgs]
             targets = move_targets_to_device(targets, device)
 
+            img_sizes = [img.shape[-2:] for img in imgs]
+            crops, origins = model.window_imgs_semantic(imgs)
+
             with autocast(
                 device_type="cuda", dtype=torch.float16, enabled=use_autocast
             ):
-                shared_logits_list = predict_shared_logits(
-                    model,
-                    imgs,
-                    src_to_shared,
-                    paradigm,
+                mask_logits_per_layer, class_logits_per_layer = model(crops)
+                mask_logits = F.interpolate(
+                    mask_logits_per_layer[-1],
+                    model.img_size,
+                    mode="bilinear",
                 )
-            per_pixel_targets = compute_shared_target(targets)
+                crop_logits = model.to_per_pixel_logits_semantic(
+                    mask_logits,
+                    class_logits_per_layer[-1],
+                )
 
-            for sample_idx, (shared_logits, shared_target) in enumerate(
-                zip(shared_logits_list, per_pixel_targets)
+            logits = model.revert_window_logits_semantic(
+                crop_logits, origins, img_sizes
+            )
+            per_pixel_targets = model.to_per_pixel_targets_semantic(
+                targets, IGNORE_INDEX
+            )
+
+            for sample_idx, (logit, target) in enumerate(
+                zip(logits, per_pixel_targets)
             ):
+                shared_logits = remap_logits(logit, src_to_shared, num_shared_classes)
+                shared_target = remap_target_ids(
+                    target, CITYSCAPES_TO_SHARED, IGNORE_INDEX
+                )
                 metric.update(shared_logits[None], shared_target[None])
                 shared_pred = shared_logits.argmax(dim=0)
                 shared_pred_vis = shared_pred.clone()
@@ -555,136 +381,109 @@ def evaluate(
     }
 
 
-def evaluate_checkpoint(config_path: str, ckpt_path: str, args, loader, wandb_run):
-    with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
-
-    src_to_shared = infer_source_mapping(config, args.src_label_space)
-    config_stem = Path(config_path).stem
-    ckpt_stem = Path(ckpt_path).stem
-
-    print(f"\n=== Evaluating checkpoint: {ckpt_path} ===")
-    print(f"Config: {config_path}")
-
-    for paradigm in args.paradigms:
-        model, source_num_classes, source_img_size = build_model_from_config(
-            config=config,
-            masked_attn_enabled=args.masked_attn_enabled,
-            device=args.device,
-            paradigm=paradigm,
-        )
-        load_checkpoint(model, ckpt_path)
-
-        print(f"\n--- Paradigm: {paradigm} ---")
-        print(f"Source model classes: {source_num_classes}")
-        print(f"Source model img_size: {source_img_size}")
-        print(f"Evaluating on Cityscapes val from: {args.cityscapes_path}")
-        print(f"Shared classes ({len(SHARED_CLASSES)}): {SHARED_CLASSES}")
-
-        results = evaluate(
-            model=model,
-            loader=loader,
-            src_to_shared=src_to_shared,
-            device=args.device,
-            paradigm=paradigm,
-            limit=args.limit,
-        )
-
-        per_class_iou = results["per_class_iou"]
-        mean_iou = results["mean_iou"]
-        confusion_iou = results["confusion_iou"]
-        gt_support = results["gt_support"]
-        pred_support = results["pred_support"]
-        processed = results["processed"]
-        total_pixels = results["ignored_pixels"] + results["valid_pixels"]
-        ignored_ratio = (
-            results["ignored_pixels"] / total_pixels
-            if total_pixels > 0
-            else float("nan")
-        )
-
-        print(f"Processed {processed} validation images")
-        print(
-            f"Valid pixels: {results['valid_pixels']:,} | "
-            f"Ignored pixels: {results['ignored_pixels']:,} | "
-            f"Ignored ratio: {ignored_ratio * 100:.2f}%"
-        )
-        print("Per-class IoU:")
-        for class_name, iou in zip(SHARED_CLASSES, per_class_iou.tolist()):
-            print(f"  {class_name:15s} {iou * 100:6.2f}")
-        print("Per-class support and confusion-derived IoU:")
-        for class_name, iou, gt_count, pred_count in zip(
-            SHARED_CLASSES,
-            confusion_iou.tolist(),
-            gt_support.tolist(),
-            pred_support.tolist(),
-        ):
-            iou_str = "nan" if iou != iou else f"{iou * 100:6.2f}"
-            print(
-                f"  {class_name:15s} IoU={iou_str:>6s} | "
-                f"GT pixels={gt_count:9d} | Pred pixels={pred_count:9d}"
-            )
-        print(f"Shared mIoU: {mean_iou.item() * 100:.2f}")
-        print("Confusion matrix (rows=GT, cols=Pred):")
-        print(results["confusion"].numpy())
-
-        if wandb_run is not None:
-            prefix = f"{config_stem}/{ckpt_stem}/{paradigm}"
-            log_dict = {
-                f"{prefix}/metrics/shared_iou_all": mean_iou.item(),
-                f"{prefix}/audit/valid_pixels": results["valid_pixels"],
-                f"{prefix}/audit/ignored_pixels": results["ignored_pixels"],
-                f"{prefix}/audit/ignored_ratio": ignored_ratio,
-            }
-            for idx, (class_name, iou, gt_count, pred_count) in enumerate(
-                zip(
-                    SHARED_CLASSES,
-                    per_class_iou.tolist(),
-                    gt_support.tolist(),
-                    pred_support.tolist(),
-                )
-            ):
-                safe_name = class_name.replace(" ", "_")
-                log_dict[f"{prefix}/metrics/shared_iou_class_{idx}"] = iou
-                log_dict[f"{prefix}/metrics/shared_iou/{safe_name}"] = iou
-                log_dict[f"{prefix}/audit/gt_pixels/{safe_name}"] = gt_count
-                log_dict[f"{prefix}/audit/pred_pixels/{safe_name}"] = pred_count
-            wandb.log(log_dict)
-
-            if results["example"] is not None:
-                fig = make_example_figure(
-                    results["example"]["img"],
-                    results["example"]["target"],
-                    results["example"]["pred"],
-                )
-                wandb.log(
-                    {f"{prefix}/qualitative/shared_eval_example": wandb.Image(fig)}
-                )
-                plt.close(fig)
-
-
 def main():
     args = parse_args()
-    if len(args.config) != len(args.ckpt):
-        raise ValueError(
-            f"--config and --ckpt must have the same length, got "
-            f"{len(args.config)} configs and {len(args.ckpt)} checkpoints."
-        )
 
-    with open(args.config[0], "r") as f:
-        first_config = yaml.safe_load(f)
+    with open(args.config, "r") as f:
+        config = yaml.safe_load(f)
 
-    wandb_run = init_wandb_run(first_config, args)
+    wandb_run = init_wandb_run(config, args)
+    src_to_shared = infer_source_mapping(config, args.src_label_space)
     loader = build_cityscapes_loader(
         cityscapes_path=args.cityscapes_path,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
     )
 
-    for config_path, ckpt_path in zip(args.config, args.ckpt):
-        evaluate_checkpoint(config_path, ckpt_path, args, loader, wandb_run)
+    model, source_num_classes, source_img_size = build_model_from_config(
+        config=config,
+        masked_attn_enabled=args.masked_attn_enabled,
+        device=args.device,
+    )
+    load_checkpoint(model, args.ckpt)
+
+    print(f"Loaded model from: {args.config}")
+    print(f"Checkpoint: {args.ckpt}")
+    print(f"Source model classes: {source_num_classes}")
+    print(f"Source model img_size: {source_img_size}")
+    print(f"Evaluating on Cityscapes val from: {args.cityscapes_path}")
+    print(f"Shared classes ({len(SHARED_CLASSES)}): {SHARED_CLASSES}")
+
+    results = evaluate(
+        model=model,
+        loader=loader,
+        src_to_shared=src_to_shared,
+        device=args.device,
+        limit=args.limit,
+    )
+
+    per_class_iou = results["per_class_iou"]
+    mean_iou = results["mean_iou"]
+    confusion_iou = results["confusion_iou"]
+    gt_support = results["gt_support"]
+    pred_support = results["pred_support"]
+    processed = results["processed"]
+    total_pixels = results["ignored_pixels"] + results["valid_pixels"]
+    ignored_ratio = (
+        results["ignored_pixels"] / total_pixels if total_pixels > 0 else float("nan")
+    )
+
+    print(f"\nProcessed {processed} validation images")
+    print(
+        f"Valid pixels: {results['valid_pixels']:,} | "
+        f"Ignored pixels: {results['ignored_pixels']:,} | "
+        f"Ignored ratio: {ignored_ratio * 100:.2f}%"
+    )
+    print("Per-class IoU:")
+    for class_name, iou in zip(SHARED_CLASSES, per_class_iou.tolist()):
+        print(f"  {class_name:15s} {iou * 100:6.2f}")
+    print("\nPer-class support and confusion-derived IoU:")
+    for class_name, iou, gt_count, pred_count in zip(
+        SHARED_CLASSES,
+        confusion_iou.tolist(),
+        gt_support.tolist(),
+        pred_support.tolist(),
+    ):
+        iou_str = "nan" if iou != iou else f"{iou * 100:6.2f}"
+        print(
+            f"  {class_name:15s} IoU={iou_str:>6s} | "
+            f"GT pixels={gt_count:9d} | Pred pixels={pred_count:9d}"
+        )
+    print(f"\nShared mIoU: {mean_iou.item() * 100:.2f}")
+    print("\nConfusion matrix (rows=GT, cols=Pred):")
+    print(results["confusion"].numpy())
 
     if wandb_run is not None:
+        log_dict = {
+            "metrics/shared_iou_all": mean_iou.item(),
+            "audit/valid_pixels": results["valid_pixels"],
+            "audit/ignored_pixels": results["ignored_pixels"],
+            "audit/ignored_ratio": ignored_ratio,
+        }
+        for idx, (class_name, iou, gt_count, pred_count) in enumerate(
+            zip(
+                SHARED_CLASSES,
+                per_class_iou.tolist(),
+                gt_support.tolist(),
+                pred_support.tolist(),
+            )
+        ):
+            safe_name = class_name.replace(" ", "_")
+            log_dict[f"metrics/shared_iou_class_{idx}"] = iou
+            log_dict[f"metrics/shared_iou/{safe_name}"] = iou
+            log_dict[f"audit/gt_pixels/{safe_name}"] = gt_count
+            log_dict[f"audit/pred_pixels/{safe_name}"] = pred_count
+        wandb.log(log_dict)
+
+        if results["example"] is not None:
+            fig = make_example_figure(
+                results["example"]["img"],
+                results["example"]["target"],
+                results["example"]["pred"],
+            )
+            wandb.log({"qualitative/shared_eval_example": wandb.Image(fig)})
+            plt.close(fig)
+
         wandb_run.finish()
 
 
