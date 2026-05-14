@@ -123,6 +123,20 @@ class LightningModule(lightning.LightningModule):
         for name, param in reversed(list(self.named_parameters())):
             lr = self.lr
 
+            if (
+                name.startswith("network.class_head")
+                or name.startswith("network.mask_head")
+                or name.startswith("network.upscale")
+            ):
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
+
+            print(name, param.requires_grad)
+
+            if not param.requires_grad:
+                continue
+
             if name.replace("network.encoder.backbone.", "") in encoder_param_names:
                 name_list = name.split(".")
 

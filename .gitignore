@@ -181,3 +181,5 @@ cython_debug/
 
 # Report (for now)
 Report/
+
+.DS_Store
