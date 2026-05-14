@@ -9,6 +9,7 @@ import torch
 import torch.nn.functional as F
 import wandb
 import yaml
+from matplotlib.patches import Patch
 from torch.amp import autocast
 from torchmetrics.classification import MulticlassJaccardIndex
 
@@ -21,6 +22,17 @@ from shared_eval.shared import (
     remap_logits,
     remap_target_ids,
 )
+
+SHARED_CLASS_COLORS = {
+    0: np.array([0.89, 0.10, 0.11, 1.0]),  # person
+    1: np.array([0.12, 0.47, 0.71, 1.0]),  # car
+    2: np.array([1.00, 0.50, 0.05, 1.0]),  # truck
+    3: np.array([0.17, 0.63, 0.17, 1.0]),  # bus
+    4: np.array([0.58, 0.40, 0.74, 1.0]),  # motorcycle
+    5: np.array([0.55, 0.34, 0.29, 1.0]),  # bicycle
+    6: np.array([0.84, 0.15, 0.16, 1.0]),  # traffic light
+}
+IGNORE_COLOR = np.array([0.0, 0.0, 0.0, 1.0])
 
 
 def parse_args():
@@ -278,11 +290,8 @@ def make_example_figure(img: torch.Tensor, target: torch.Tensor, pred: torch.Ten
             ]
         )
     )
-    colors = plt.get_cmap("tab20", max(len(unique_classes), 1))(
-        np.linspace(0, 1, max(len(unique_classes), 1))
-    )
-    color_map = {cls_id: colors[i] for i, cls_id in enumerate(unique_classes)}
-    color_map[IGNORE_INDEX] = np.array([0.0, 0.0, 0.0, 1.0])
+    color_map = {cls_id: SHARED_CLASS_COLORS[int(cls_id)] for cls_id in unique_classes}
+    color_map[IGNORE_INDEX] = IGNORE_COLOR
 
     def colorize(mask):
         out = np.zeros((*mask.shape, 4), dtype=np.float32)
@@ -299,7 +308,24 @@ def make_example_figure(img: torch.Tensor, target: torch.Tensor, pred: torch.Ten
     axes[2].set_title("Shared Pred")
     for ax in axes:
         ax.axis("off")
-    plt.tight_layout()
+    legend_handles = []
+    for cls_id in unique_classes:
+        if cls_id == IGNORE_INDEX:
+            label = "ignored"
+        else:
+            label = SHARED_CLASSES[int(cls_id)]
+        legend_handles.append(
+            Patch(facecolor=color_map[cls_id], edgecolor="black", label=label)
+        )
+    if legend_handles:
+        fig.legend(
+            handles=legend_handles,
+            loc="lower center",
+            ncol=min(len(legend_handles), 4),
+            bbox_to_anchor=(0.5, -0.02),
+            frameon=False,
+        )
+    plt.tight_layout(rect=(0, 0.08, 1, 1))
     return fig
 
 
