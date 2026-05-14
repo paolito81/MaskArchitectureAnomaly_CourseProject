@@ -290,8 +290,12 @@ def make_example_figure(img: torch.Tensor, target: torch.Tensor, pred: torch.Ten
             ]
         )
     )
-    color_map = {cls_id: SHARED_CLASS_COLORS[int(cls_id)] for cls_id in unique_classes}
-    color_map[IGNORE_INDEX] = IGNORE_COLOR
+    color_map = {}
+    for cls_id in unique_classes:
+        if int(cls_id) == IGNORE_INDEX:
+            color_map[cls_id] = IGNORE_COLOR
+        else:
+            color_map[cls_id] = SHARED_CLASS_COLORS[int(cls_id)]
 
     def colorize(mask):
         out = np.zeros((*mask.shape, 4), dtype=np.float32)
