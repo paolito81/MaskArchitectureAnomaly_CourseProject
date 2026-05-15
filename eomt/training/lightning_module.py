@@ -62,7 +62,7 @@ class LightningModule(lightning.LightningModule):
         warmup_steps: tuple[int, int],
         ckpt_path=None,
         delta_weights=False,
-        load_ckpt_class_head=False, #FALSE BECAUSE I WANT TO FINETUNE.
+        load_ckpt_class_head=True, #FALSE BECAUSE I WANT TO FINETUNE.
     ):
         super().__init__() #calls the constructor of the parent class and creates instance attributes (self.something) and stores values in them.
         self.network = network
