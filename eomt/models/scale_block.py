@@ -7,6 +7,27 @@
 from torch import nn
 from timm.layers import LayerNorm2d
 
+#this is a small block used in the mask head of the model. 
+#It consists of a convolutional layer followed by an activation function and another convolutional layer, 
+#with a normalization layer at the end. 
+#The purpose of this block is to process the features extracted by the encoder and produce refined features that 
+#can be used to generate accurate segmentation masks for each query. 
+#The conv1_layer parameter allows for flexibility in choosing the type of convolutional layer used in the first convolution operation, 
+#which can be either a standard convolution or a transposed convolution (used for upsampling).
+
+#image
+#   ↓
+#ViT patch features
+#   ↓
+#query-mask interaction
+#   ↓
+#low-resolution mask features
+#   ↓
+#SCALEBLOCK UNSAMPLING
+#   ↓
+#higher-resolution features
+#   ↓
+#final segmentation masks
 
 class ScaleBlock(nn.Module):
     def __init__(self, embed_dim, conv1_layer=nn.ConvTranspose2d):

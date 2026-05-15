@@ -38,6 +38,7 @@ class EoMT(nn.Module):
         #THIS NEW HEAD MUST BE TRAINED
         #initialization of the classification layer
         self.class_head = nn.Linear(self.encoder.backbone.embed_dim, num_classes + 1) #Each query produces a class prediction, where num_classes is the number of object classes in the dataset.
+        #in this case the weights are initialized randomly and will be learned during training.
 
         #Initialization of the mask prediction MLP
         #self.mask_head is a small neural network (an MLP) that transforms each query vector into a representation suitable for generating masks.

@@ -62,7 +62,7 @@ class LightningModule(lightning.LightningModule):
         warmup_steps: tuple[int, int],
         ckpt_path=None,
         delta_weights=False,
-        load_ckpt_class_head=True,
+        load_ckpt_class_head=False, #FALSE BECAUSE I WANT TO FINETUNE.
     ):
         super().__init__() #calls the constructor of the parent class and creates instance attributes (self.something) and stores values in them.
         self.network = network
@@ -128,7 +128,7 @@ class LightningModule(lightning.LightningModule):
                 or name.startswith("network.mask_head")
                 or name.startswith("network.upscale")
             ):
-                param.requires_grad = True
+                param.requires_grad = True #In this way we ensure that the classification head, mask head, and upscale layers are always trained, even if delta_weights is True and we are loading weights from a checkpoint.
             else:
                 param.requires_grad = False
 
