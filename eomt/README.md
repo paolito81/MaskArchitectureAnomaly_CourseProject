@@ -11,13 +11,29 @@ wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 bash Miniconda3-latest-Linux-x86_64.sh
 ```
 
-Then create the environment, activate it, and install the dependencies:
+Then create a clean Python 3.11 environment, activate it, and install the dependencies:
 
 ```bash
-conda create -n eomt python==3.13.2
+conda create -n eomt python==3.11
 conda activate eomt
 python3 -m pip install -r requirements.txt
 ```
+
+This project is not currently set up for Python 3.12+.
+Using Python 3.12/3.13 can cause pip to resolve newer PyTorch builds than the ones pinned here, which then conflicts with the rest of the stack.
+
+If you are running in Colab or another shared environment, prefer a fresh virtual environment or uninstall conflicting preinstalled packages before installing the requirements:
+
+```bash
+python3 -m pip uninstall -y torch torchao torchvision transformers numpy
+python3 -m pip install -r requirements.txt
+```
+
+The most common symptoms of an incompatible environment are:
+- `A module that was compiled using NumPy 1.x cannot be run in NumPy 2`
+- `AttributeError: type object 'torch._C.Tag' has no attribute 'needs_fixed_stride_order'`
+
+Those usually mean the environment has drifted to `numpy>=2`, a newer `torch`, or a `torchao` build that does not match the installed PyTorch version.
 
 [Weights & Biases](https://wandb.ai/) (wandb) is used for experiment logging and visualization. To enable wandb, log in to your account:
 
