@@ -34,6 +34,7 @@ from torch.nn.functional import interpolate
 from torchvision.transforms.v2.functional import pad
 import logging
 
+from models.lora import is_lora_parameter
 from training.two_stage_warmup_poly_schedule import TwoStageWarmupPolySchedule
 
 bold_green = "\033[1;32m"
@@ -119,6 +120,7 @@ class LightningModule(lightning.LightningModule):
                 name.startswith("network.class_head")
                 or name.startswith("network.mask_head")
                 or name.startswith("network.upscale")
+                or is_lora_parameter(name)
             ):
                 param.requires_grad = True
             else:
@@ -903,8 +905,24 @@ class LightningModule(lightning.LightningModule):
                 for k, v in ckpt.items()
                 if "class_head" not in k and "class_predictor" not in k
             }
+        ckpt = self._map_ckpt_to_lora_wrappers(ckpt)
         logging.info(f"Loaded {len(ckpt)} keys")
         return ckpt
+
+    def _map_ckpt_to_lora_wrappers(self, ckpt):
+        current_keys = self.state_dict().keys()
+        mapped = {}
+
+        for key, value in ckpt.items():
+            lora_key = key.replace(".weight", ".linear.weight").replace(
+                ".bias", ".linear.bias"
+            )
+            if lora_key in current_keys:
+                mapped[lora_key] = value
+            else:
+                mapped[key] = value
+
+        return mapped
 
     def _raise_on_incompatible(self, incompatible_keys, load_ckpt_class_head):
         if incompatible_keys.missing_keys:
@@ -916,6 +934,9 @@ class LightningModule(lightning.LightningModule):
                 ]
             else:
                 missing_keys = incompatible_keys.missing_keys
+            missing_keys = [
+                key for key in missing_keys if not is_lora_parameter(key)
+            ]
             if missing_keys:
                 raise ValueError(f"Missing keys: {missing_keys}")
         if incompatible_keys.unexpected_keys:

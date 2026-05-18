@@ -69,6 +69,20 @@ To fine-tune a pre-trained EoMT model, add:
 🔧 Replace `/path/to/pytorch_model.bin` with the path to the checkpoint to fine-tune.  
 > `--model.load_ckpt_class_head False` skips loading the classification head when fine-tuning on a dataset with different classes.
 
+To fine-tune with LoRA adapters instead of updating the ViT backbone weights, use the LoRA config:
+
+```bash
+python3 main.py fit \
+  -c configs/dinov2/cityscapes/semantic/eomt_base_640_lora.yaml \
+  --model.ckpt_path /path/to/pytorch_model.bin \
+  --model.load_ckpt_class_head False \
+  --trainer.devices 1 \
+  --data.batch_size 1 \
+  --data.path /path/to/dataset
+```
+
+The LoRA config keeps the original EoMT fine-tuning flow but injects trainable low-rank adapters into the ViT attention `qkv` projections. The segmentation heads and upscale module remain trainable, while the base ViT weights stay frozen.
+
 ### Evaluating
 
 To evaluate a pre-trained EoMT model, run:

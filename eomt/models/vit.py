@@ -11,6 +11,8 @@ import torch.nn as nn
 import timm
 from transformers import AutoModel
 
+from models.lora import apply_lora_to_modules
+
 
 class ViT(nn.Module):
     def __init__(
@@ -19,6 +21,11 @@ class ViT(nn.Module):
         patch_size=16,
         backbone_name="vit_large_patch14_reg4_dinov2",
         ckpt_path: Optional[str] = None,
+        lora_enabled: bool = False,
+        lora_rank: int = 8,
+        lora_alpha: float = 16.0,
+        lora_dropout: float = 0.0,
+        lora_targets: tuple[str, ...] = ("attn.qkv",),
     ):
         super().__init__()
 
@@ -36,6 +43,17 @@ class ViT(nn.Module):
                 img_size=img_size,
                 patch_size=patch_size,
                 num_classes=0,
+            )
+
+        self.lora_enabled = lora_enabled
+        self.lora_targets = tuple(lora_targets)
+        self.lora_modules = 0
+        if lora_enabled:
+            self.lora_modules = self.apply_lora(
+                targets=self.lora_targets,
+                rank=lora_rank,
+                alpha=lora_alpha,
+                dropout=lora_dropout,
             )
 
         pixel_mean = torch.tensor([0.485, 0.456, 0.406]).reshape(1, -1, 1, 1)
@@ -66,3 +84,28 @@ class ViT(nn.Module):
         )
 
         return backbone
+
+    def apply_lora(
+        self,
+        targets: tuple[str, ...],
+        rank: int,
+        alpha: float,
+        dropout: float,
+    ) -> int:
+        replaced = 0
+        for block in self.backbone.blocks:
+            replaced += apply_lora_to_modules(
+                block,
+                targets=targets,
+                rank=rank,
+                alpha=alpha,
+                dropout=dropout,
+            )
+
+        if replaced == 0:
+            raise ValueError(
+                "LoRA was enabled but no target modules were replaced. "
+                f"Requested targets: {targets}"
+            )
+
+        return replaced
