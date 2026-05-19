@@ -44,13 +44,12 @@ reset = "\033[0m"
 class LightningModule(lightning.LightningModule):
     def __init__(
         self,
-        #the network is the model architecture that will be trained, 
-        #which is passed as an argument to the constructor of the LightningModule class. 
-        #This allows for flexibility in choosing different model architectures for training and evaluation.
+        # the network is the model architecture that will be trained,
+        # which is passed as an argument to the constructor of the LightningModule class.
+        # This allows for flexibility in choosing different model architectures for training and evaluation.
         network: nn.Module,
         img_size: tuple[int, int],
         num_classes: int,
-
         attn_mask_annealing_enabled: bool,
         attn_mask_annealing_start_steps: Optional[list[int]],
         attn_mask_annealing_end_steps: Optional[list[int]],
@@ -63,9 +62,9 @@ class LightningModule(lightning.LightningModule):
         warmup_steps: tuple[int, int],
         ckpt_path=None,
         delta_weights=False,
-        load_ckpt_class_head=True, 
+        load_ckpt_class_head=True,
     ):
-        super().__init__() #calls the constructor of the parent class and creates instance attributes (self.something) and stores values in them.
+        super().__init__()  # calls the constructor of the parent class and creates instance attributes (self.something) and stores values in them.
         self.network = network
         self.img_size = img_size
         self.num_classes = num_classes
@@ -82,10 +81,12 @@ class LightningModule(lightning.LightningModule):
 
         self.strict_loading = False
 
-        #this block handles check-point loading and delta weights, 
-        #which is a technique used to initialize the model with pre-trained weights while allowing for modifications to the architecture.
+        # this block handles check-point loading and delta weights,
+        # which is a technique used to initialize the model with pre-trained weights while allowing for modifications to the architecture.
 
-        if delta_weights and ckpt_path: #case 1: we want to use delta weights and we have a checkpoint path provided
+        if (
+            delta_weights and ckpt_path
+        ):  # case 1: we want to use delta weights and we have a checkpoint path provided
             logging.info("Delta weights mode")
             self._zero_init_outside_encoder(skip_class_head=not load_ckpt_class_head)
             current_state_dict = {k: v.cpu() for k, v in self.state_dict().items()}
@@ -100,14 +101,16 @@ class LightningModule(lightning.LightningModule):
             incompatible_keys = self.load_state_dict(combined_state_dict, strict=False)
             self._raise_on_incompatible(incompatible_keys, load_ckpt_class_head)
 
-        elif ckpt_path: #case 2: we have a checkpoint path provided but we do not want to use delta weights, so we simply load the checkpoint weights into the model without any modifications.
+        elif (
+            ckpt_path
+        ):  # case 2: we have a checkpoint path provided but we do not want to use delta weights, so we simply load the checkpoint weights into the model without any modifications.
             ckpt = self._load_ckpt(ckpt_path, load_ckpt_class_head)
             incompatible_keys = self.load_state_dict(ckpt, strict=False)
             self._raise_on_incompatible(incompatible_keys, load_ckpt_class_head)
 
         self.log = torch.compiler.disable(self.log)  # type: ignore
 
-    #This creates the optimizer and learning-rate scheduler.
+    # This creates the optimizer and learning-rate scheduler.
     def configure_optimizers(self):
         encoder_param_names = {
             n for n, _ in self.network.encoder.backbone.named_parameters()
@@ -126,11 +129,11 @@ class LightningModule(lightning.LightningModule):
 
             if (
                 name.startswith("network.class_head")
-                or name.startswith("network.mask_head")
-                or name.startswith("network.upscale")
+                # or name.startswith("network.mask_head")
+                # or name.startswith("network.upscale")
                 or is_lora_parameter(name)
             ):
-                param.requires_grad = True #In this way we ensure that the classification head, mask head, and upscale layers are always trained, even if delta_weights is True and we are loading weights from a checkpoint.
+                param.requires_grad = True  # In this way we ensure that the classification head, mask head, and upscale layers are always trained, even if delta_weights is True and we are loading weights from a checkpoint.
             else:
                 param.requires_grad = False
 
@@ -192,16 +195,16 @@ class LightningModule(lightning.LightningModule):
             },
         }
 
-    #how input data flows through the neural network
+    # how input data flows through the neural network
     def forward(self, imgs):
         x = imgs / 255.0
 
         return self.network(x)
 
-    #1. get a batch
-    #2. run the model
-    #3. compute losses
-    #4. return the total loss
+    # 1. get a batch
+    # 2. run the model
+    # 3. compute losses
+    # 4. return the total loss
     def training_step(self, batch, batch_idx):
         imgs, targets = batch
 
@@ -947,9 +950,7 @@ class LightningModule(lightning.LightningModule):
                 ]
             else:
                 missing_keys = incompatible_keys.missing_keys
-            missing_keys = [
-                key for key in missing_keys if not is_lora_parameter(key)
-            ]
+            missing_keys = [key for key in missing_keys if not is_lora_parameter(key)]
             if missing_keys:
                 raise ValueError(f"Missing keys: {missing_keys}")
         if incompatible_keys.unexpected_keys:
