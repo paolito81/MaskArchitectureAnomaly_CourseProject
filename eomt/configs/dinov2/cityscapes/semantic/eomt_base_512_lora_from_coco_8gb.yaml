@@ -1,0 +1,37 @@
+trainer:
+  max_epochs: 107
+  precision: "16-mixed"
+  devices: 1
+  accumulate_grad_batches: 8
+  logger:
+    class_path: lightning.pytorch.loggers.wandb.WandbLogger
+    init_args:
+      resume: allow
+      project: "eomt"
+      name: "cityscapes_lora_from_coco_512_8gb"
+model:
+  class_path: training.mask_classification_semantic.MaskClassificationSemantic
+  init_args:
+    attn_mask_annealing_enabled: True
+    attn_mask_annealing_start_steps: [29564, 73910, 118256]
+    attn_mask_annealing_end_steps: [59128, 103474, 147820]
+    network:
+      class_path: models.eomt.EoMT
+      init_args:
+        num_q: 200
+        num_blocks: 3
+        encoder:
+          class_path: models.vit.ViT
+          init_args:
+            backbone_name: vit_base_patch14_reg4_dinov2
+            lora_enabled: true
+            lora_rank: 8
+            lora_alpha: 16.0
+            lora_dropout: 0.05
+            lora_targets: ["attn.qkv"]
+data:
+  class_path: datasets.cityscapes_semantic.CityscapesSemantic
+  init_args:
+    img_size: [512, 512]
+    batch_size: 1
+    num_workers: 2
