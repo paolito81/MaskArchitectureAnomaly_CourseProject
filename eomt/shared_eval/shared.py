@@ -166,6 +166,10 @@ CITYSCAPES_LABEL_TO_ID = {
     label: int(id) for id, label in CITYSCAPES_ID_TO_LABEL.items()
 }
 
+CITYSCAPES_CLASSES = [
+    CITYSCAPES_ID_TO_LABEL[str(i)] for i in range(len(CITYSCAPES_ID_TO_LABEL))
+]
+
 
 SHARED_CLASSES = [
     "person",
@@ -197,6 +201,39 @@ COCO_TO_SHARED = {
     COCO_LABEL_TO_ID["motorcycle"]: SHARED_NAME_TO_ID["motorcycle"],
     COCO_LABEL_TO_ID["bicycle"]: SHARED_NAME_TO_ID["bicycle"],
     COCO_LABEL_TO_ID["traffic light"]: SHARED_NAME_TO_ID["traffic light"],
+}
+
+CITYSCAPES_TO_CITYSCAPES = {
+    cityscapes_id: cityscapes_id for cityscapes_id in CITYSCAPES_LABEL_TO_ID.values()
+}
+
+# Approximate mapping from COCO panoptic labels into the Cityscapes semantic
+# label space. Classes that do not have a reasonable COCO counterpart are left
+# unmapped and should be ignored during evaluation.
+COCO_TO_CITYSCAPES = {
+    COCO_LABEL_TO_ID["road"]: CITYSCAPES_LABEL_TO_ID["road"],
+    COCO_LABEL_TO_ID["pavement-merged"]: CITYSCAPES_LABEL_TO_ID["sidewalk"],
+    COCO_LABEL_TO_ID["building-other-merged"]: CITYSCAPES_LABEL_TO_ID["building"],
+    COCO_LABEL_TO_ID["house"]: CITYSCAPES_LABEL_TO_ID["building"],
+    COCO_LABEL_TO_ID["wall-brick"]: CITYSCAPES_LABEL_TO_ID["wall"],
+    COCO_LABEL_TO_ID["wall-stone"]: CITYSCAPES_LABEL_TO_ID["wall"],
+    COCO_LABEL_TO_ID["wall-tile"]: CITYSCAPES_LABEL_TO_ID["wall"],
+    COCO_LABEL_TO_ID["wall-wood"]: CITYSCAPES_LABEL_TO_ID["wall"],
+    COCO_LABEL_TO_ID["wall-other-merged"]: CITYSCAPES_LABEL_TO_ID["wall"],
+    COCO_LABEL_TO_ID["fence-merged"]: CITYSCAPES_LABEL_TO_ID["fence"],
+    COCO_LABEL_TO_ID["traffic light"]: CITYSCAPES_LABEL_TO_ID["traffic light"],
+    COCO_LABEL_TO_ID["stop sign"]: CITYSCAPES_LABEL_TO_ID["traffic sign"],
+    COCO_LABEL_TO_ID["tree-merged"]: CITYSCAPES_LABEL_TO_ID["vegetation"],
+    COCO_LABEL_TO_ID["grass-merged"]: CITYSCAPES_LABEL_TO_ID["terrain"],
+    COCO_LABEL_TO_ID["dirt-merged"]: CITYSCAPES_LABEL_TO_ID["terrain"],
+    COCO_LABEL_TO_ID["sky-other-merged"]: CITYSCAPES_LABEL_TO_ID["sky"],
+    COCO_LABEL_TO_ID["person"]: CITYSCAPES_LABEL_TO_ID["person"],
+    COCO_LABEL_TO_ID["car"]: CITYSCAPES_LABEL_TO_ID["car"],
+    COCO_LABEL_TO_ID["truck"]: CITYSCAPES_LABEL_TO_ID["truck"],
+    COCO_LABEL_TO_ID["bus"]: CITYSCAPES_LABEL_TO_ID["bus"],
+    COCO_LABEL_TO_ID["train"]: CITYSCAPES_LABEL_TO_ID["train"],
+    COCO_LABEL_TO_ID["motorcycle"]: CITYSCAPES_LABEL_TO_ID["motorcycle"],
+    COCO_LABEL_TO_ID["bicycle"]: CITYSCAPES_LABEL_TO_ID["bicycle"],
 }
 
 

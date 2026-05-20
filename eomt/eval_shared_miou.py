@@ -15,7 +15,11 @@ from torchmetrics.classification import MulticlassJaccardIndex
 
 from datasets.cityscapes_semantic import CityscapesSemantic
 from shared_eval.shared import (
+    CITYSCAPES_CLASSES,
+    CITYSCAPES_LABEL_TO_ID,
+    CITYSCAPES_TO_CITYSCAPES,
     CITYSCAPES_TO_SHARED,
+    COCO_TO_CITYSCAPES,
     COCO_TO_SHARED,
     IGNORE_INDEX,
     SHARED_CLASSES,
@@ -74,6 +78,12 @@ def parse_args():
         help="Which mapping to use for model output channels.",
     )
     parser.add_argument(
+        "--eval-label-space",
+        choices=["shared", "cityscapes"],
+        default="shared",
+        help="Label space used for metrics. 'cityscapes' evaluates in the 19-class Cityscapes space.",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -99,7 +109,7 @@ def parse_args():
         "--example-min-classes",
         type=int,
         default=4,
-        help="Minimum number of shared ground-truth classes required before an image is kept as the qualitative example.",
+        help="Minimum number of evaluated ground-truth classes required before an image is kept as the qualitative example.",
     )
     return parser.parse_args()
 
@@ -130,6 +140,54 @@ def infer_source_mapping(config, override: str):
     raise ValueError(
         f"Could not infer source label space from data class path: {data_class_path}"
     )
+
+
+def infer_source_space(config, override: str):
+    if override != "auto":
+        return override
+
+    data_class_path = config["data"]["class_path"]
+    if "coco_panoptic" in data_class_path:
+        return "coco"
+    if "cityscapes_semantic" in data_class_path:
+        return "cityscapes"
+    raise ValueError(
+        f"Could not infer source label space from data class path: {data_class_path}"
+    )
+
+
+def get_eval_spec(source_space: str, eval_label_space: str):
+    if eval_label_space == "shared":
+        src_to_eval = (
+            COCO_TO_SHARED if source_space == "coco" else CITYSCAPES_TO_SHARED
+        )
+        return {
+            "name": "shared",
+            "class_names": SHARED_CLASSES,
+            "src_to_eval": src_to_eval,
+            "target_to_eval": CITYSCAPES_TO_SHARED,
+            "colors": SHARED_CLASS_COLORS,
+        }
+
+    if eval_label_space == "cityscapes":
+        src_to_eval = (
+            COCO_TO_CITYSCAPES
+            if source_space == "coco"
+            else CITYSCAPES_TO_CITYSCAPES
+        )
+        target_to_eval = {
+            cityscapes_id: cityscapes_id
+            for cityscapes_id in set(src_to_eval.values())
+        }
+        return {
+            "name": "cityscapes",
+            "class_names": CITYSCAPES_CLASSES,
+            "src_to_eval": src_to_eval,
+            "target_to_eval": target_to_eval,
+            "colors": None,
+        }
+
+    raise ValueError(f"Unsupported eval label space: {eval_label_space}")
 
 
 def build_cityscapes_loader(cityscapes_path: str, batch_size: int, num_workers: int):
@@ -265,7 +323,7 @@ def init_wandb_run(config: dict, args):
             "config_path": args.config,
             "checkpoint": args.ckpt,
             "cityscapes_path": args.cityscapes_path,
-            "shared_classes": SHARED_CLASSES,
+            "eval_label_space": args.eval_label_space,
             "src_label_space": args.src_label_space,
             "masked_attn_enabled": args.masked_attn_enabled,
         },
@@ -277,7 +335,14 @@ def init_wandb_run(config: dict, args):
     return run
 
 
-def make_example_figure(img: torch.Tensor, target: torch.Tensor, pred: torch.Tensor):
+def make_example_figure(
+    img: torch.Tensor,
+    target: torch.Tensor,
+    pred: torch.Tensor,
+    class_names: list[str],
+    colors: dict[int, np.ndarray] | None = None,
+    title_prefix: str = "",
+):
     img_np = img.detach().cpu().numpy().transpose(1, 2, 0)
     target_np = target.detach().cpu().numpy()
     pred_np = pred.detach().cpu().numpy()
@@ -291,11 +356,15 @@ def make_example_figure(img: torch.Tensor, target: torch.Tensor, pred: torch.Ten
         )
     )
     color_map = {}
+    palette = plt.cm.get_cmap("tab20", len(class_names))
     for cls_id in unique_classes:
         if int(cls_id) == IGNORE_INDEX:
             color_map[cls_id] = IGNORE_COLOR
         else:
-            color_map[cls_id] = SHARED_CLASS_COLORS[int(cls_id)]
+            if colors is not None and int(cls_id) in colors:
+                color_map[cls_id] = colors[int(cls_id)]
+            else:
+                color_map[cls_id] = palette(int(cls_id))
 
     def colorize(mask):
         out = np.zeros((*mask.shape, 4), dtype=np.float32)
@@ -307,9 +376,9 @@ def make_example_figure(img: torch.Tensor, target: torch.Tensor, pred: torch.Ten
     axes[0].imshow(img_np)
     axes[0].set_title("Image")
     axes[1].imshow(colorize(target_np))
-    axes[1].set_title("Shared GT")
+    axes[1].set_title(f"{title_prefix}GT".strip())
     axes[2].imshow(colorize(pred_np))
-    axes[2].set_title("Shared Pred")
+    axes[2].set_title(f"{title_prefix}Pred".strip())
     for ax in axes:
         ax.axis("off")
     legend_handles = []
@@ -317,7 +386,7 @@ def make_example_figure(img: torch.Tensor, target: torch.Tensor, pred: torch.Ten
         if cls_id == IGNORE_INDEX:
             label = "ignored"
         else:
-            label = SHARED_CLASSES[int(cls_id)]
+            label = class_names[int(cls_id)]
         legend_handles.append(
             Patch(facecolor=color_map[cls_id], edgecolor="black", label=label)
         )
@@ -341,19 +410,22 @@ def count_valid_shared_classes(mask: torch.Tensor):
 def evaluate(
     model,
     loader,
-    src_to_shared,
+    eval_spec,
     device: str,
     limit: int | None = None,
     example_min_classes: int = 4,
 ):
-    num_shared_classes = len(SHARED_CLASSES)
+    class_names = eval_spec["class_names"]
+    src_to_eval = eval_spec["src_to_eval"]
+    target_to_eval = eval_spec["target_to_eval"]
+    num_eval_classes = len(class_names)
     metric = MulticlassJaccardIndex(
-        num_classes=num_shared_classes,
+        num_classes=num_eval_classes,
         average=None,
         ignore_index=IGNORE_INDEX,
     ).to(device)
     confusion = torch.zeros(
-        (num_shared_classes, num_shared_classes), dtype=torch.int64, device=device
+        (num_eval_classes, num_eval_classes), dtype=torch.int64, device=device
     )
     ignored_pixels = 0
     valid_pixels = 0
@@ -395,23 +467,21 @@ def evaluate(
             for sample_idx, (logit, target) in enumerate(
                 zip(logits, per_pixel_targets)
             ):
-                shared_logits = remap_logits(logit, src_to_shared, num_shared_classes)
-                shared_target = remap_target_ids(
-                    target, CITYSCAPES_TO_SHARED, IGNORE_INDEX
-                )
-                metric.update(shared_logits[None], shared_target[None])
-                shared_pred = shared_logits.argmax(dim=0)
-                shared_pred_vis = shared_pred.clone()
-                shared_pred_vis[shared_target == IGNORE_INDEX] = IGNORE_INDEX
+                eval_logits = remap_logits(logit, src_to_eval, num_eval_classes)
+                eval_target = remap_target_ids(target, target_to_eval, IGNORE_INDEX)
+                metric.update(eval_logits[None], eval_target[None])
+                eval_pred = eval_logits.argmax(dim=0)
+                eval_pred_vis = eval_pred.clone()
+                eval_pred_vis[eval_target == IGNORE_INDEX] = IGNORE_INDEX
 
-                update_confusion_matrix(confusion, shared_pred, shared_target)
-                ignored_pixels += int((shared_target == IGNORE_INDEX).sum().item())
-                valid_pixels += int((shared_target != IGNORE_INDEX).sum().item())
-                num_present_classes = count_valid_shared_classes(shared_target)
+                update_confusion_matrix(confusion, eval_pred, eval_target)
+                ignored_pixels += int((eval_target == IGNORE_INDEX).sum().item())
+                valid_pixels += int((eval_target != IGNORE_INDEX).sum().item())
+                num_present_classes = count_valid_shared_classes(eval_target)
                 candidate_example = {
                     "img": imgs[sample_idx].detach().cpu(),
-                    "target": shared_target.detach().cpu(),
-                    "pred": shared_pred_vis.detach().cpu(),
+                    "target": eval_target.detach().cpu(),
+                    "pred": eval_pred_vis.detach().cpu(),
                     "num_present_classes": num_present_classes,
                 }
                 if (
@@ -459,7 +529,8 @@ def main():
         config = yaml.safe_load(f)
 
     wandb_run = init_wandb_run(config, args)
-    src_to_shared = infer_source_mapping(config, args.src_label_space)
+    source_space = infer_source_space(config, args.src_label_space)
+    eval_spec = get_eval_spec(source_space, args.eval_label_space)
     loader = build_cityscapes_loader(
         cityscapes_path=args.cityscapes_path,
         batch_size=args.batch_size,
@@ -477,13 +548,25 @@ def main():
     print(f"Checkpoint: {args.ckpt}")
     print(f"Source model classes: {source_num_classes}")
     print(f"Source model img_size: {source_img_size}")
+    print(f"Source label space: {source_space}")
     print(f"Evaluating on Cityscapes val from: {args.cityscapes_path}")
-    print(f"Shared classes ({len(SHARED_CLASSES)}): {SHARED_CLASSES}")
+    print(
+        f"Evaluation label space: {eval_spec['name']} "
+        f"({len(eval_spec['class_names'])} classes)"
+    )
+    print(f"Evaluation classes: {eval_spec['class_names']}")
+    if args.eval_label_space == "cityscapes" and source_space == "coco":
+        mapped_cityscapes = sorted(set(eval_spec["target_to_eval"].keys()))
+        mapped_names = [CITYSCAPES_CLASSES[i] for i in mapped_cityscapes]
+        print(
+            "Note: COCO -> Cityscapes evaluation only scores mapped Cityscapes classes "
+            f"and ignores unmatched GT classes: {mapped_names}"
+        )
 
     results = evaluate(
         model=model,
         loader=loader,
-        src_to_shared=src_to_shared,
+        eval_spec=eval_spec,
         device=args.device,
         limit=args.limit,
     )
@@ -506,11 +589,11 @@ def main():
         f"Ignored ratio: {ignored_ratio * 100:.2f}%"
     )
     print("Per-class IoU:")
-    for class_name, iou in zip(SHARED_CLASSES, per_class_iou.tolist()):
+    for class_name, iou in zip(eval_spec["class_names"], per_class_iou.tolist()):
         print(f"  {class_name:15s} {iou * 100:6.2f}")
     print("\nPer-class support and confusion-derived IoU:")
     for class_name, iou, gt_count, pred_count in zip(
-        SHARED_CLASSES,
+        eval_spec["class_names"],
         confusion_iou.tolist(),
         gt_support.tolist(),
         pred_support.tolist(),
@@ -520,30 +603,31 @@ def main():
             f"  {class_name:15s} IoU={iou_str:>6s} | "
             f"GT pixels={gt_count:9d} | Pred pixels={pred_count:9d}"
         )
-    print(f"\nShared mIoU: {mean_iou.item() * 100:.2f}")
+    print(f"\n{eval_spec['name'].title()} mIoU: {mean_iou.item() * 100:.2f}")
     print("\nConfusion matrix (rows=GT, cols=Pred):")
     print(results["confusion"].numpy())
     print("\nNormalized confusion matrix (rows=GT, each row sums to 1):")
     print(results["confusion_normalized"].numpy())
 
     if wandb_run is not None:
+        metric_prefix = f"metrics/{eval_spec['name']}_iou"
         log_dict = {
-            "metrics/shared_iou_all": mean_iou.item(),
+            f"{metric_prefix}_all": mean_iou.item(),
             "audit/valid_pixels": results["valid_pixels"],
             "audit/ignored_pixels": results["ignored_pixels"],
             "audit/ignored_ratio": ignored_ratio,
         }
         for idx, (class_name, iou, gt_count, pred_count) in enumerate(
             zip(
-                SHARED_CLASSES,
+                eval_spec["class_names"],
                 per_class_iou.tolist(),
                 gt_support.tolist(),
                 pred_support.tolist(),
             )
         ):
             safe_name = class_name.replace(" ", "_")
-            log_dict[f"metrics/shared_iou_class_{idx}"] = iou
-            log_dict[f"metrics/shared_iou/{safe_name}"] = iou
+            log_dict[f"{metric_prefix}_class_{idx}"] = iou
+            log_dict[f"{metric_prefix}/{safe_name}"] = iou
             log_dict[f"audit/gt_pixels/{safe_name}"] = gt_count
             log_dict[f"audit/pred_pixels/{safe_name}"] = pred_count
         wandb.log(log_dict)
@@ -553,8 +637,15 @@ def main():
                 results["example"]["img"],
                 results["example"]["target"],
                 results["example"]["pred"],
+                class_names=eval_spec["class_names"],
+                colors=eval_spec["colors"],
+                title_prefix=f"{eval_spec['name'].title()} ",
             )
-            wandb.log({"qualitative/shared_eval_example": wandb.Image(fig)})
+            wandb.log(
+                {
+                    f"qualitative/{eval_spec['name']}_eval_example": wandb.Image(fig)
+                }
+            )
             plt.close(fig)
 
         wandb_run.finish()
