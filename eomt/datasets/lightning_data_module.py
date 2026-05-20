@@ -9,6 +9,11 @@ import torch
 import lightning
 
 
+#this module serves as a base class for all dataset-specific LightningDataModules, providing common functionality and structure for loading and preprocessing data 
+# for training and evaluation. 
+# It defines the initialization of the data module, including setting up paths, batch size, number of workers, image size, number of classes, and other relevant parameters. 
+# Additionally, it includes static methods for collating training and evaluation batches, which can be customized by subclasses to handle specific data formats and requirements of different datasets.
+
 class LightningDataModule(lightning.LightningDataModule):
     def __init__(
         self,

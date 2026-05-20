@@ -15,6 +15,9 @@ from datasets.lightning_data_module import LightningDataModule
 from datasets.transforms import Transforms
 from datasets.dataset import Dataset
 
+
+# coco category IDs are not contiguous and start from 1, while the model expects class labels to be contiguous and start from 0. 
+
 CLASS_MAPPING = {
     1: 0,
     2: 1,
@@ -106,6 +109,7 @@ class COCOInstance(LightningDataModule):
         num_workers: int = 4,
         batch_size: int = 16,
         img_size: tuple[int, int] = (640, 640),
+        #coco classes
         num_classes: int = 80,
         color_jitter_enabled=False,
         scale_range=(0.1, 2.0),
@@ -129,6 +133,12 @@ class COCOInstance(LightningDataModule):
 
     @staticmethod
     def target_parser(
+        #coco instance mask are often stored as polygons,
+        #  which are lists of coordinates that define the shape of the instance in the image. 
+        # The coco_mask.frPyObjects function is used to convert these polygon annotations into Run-Length Encoding (RLE)
+        # format, which is a more compact representation of binary masks. 
+        # The rle variable contains the RLE representation of the instance mask, which can then be decoded into a binary mask using coco_mask.decode(rle). 
+        # This process allows us to create binary masks for each instance in the COCO dataset based on their polygon annotations.
         polygons_by_id: dict[int, list[list[float]]],
         labels_by_id: dict[int, int],
         is_crowd_by_id: dict[int, bool],
@@ -177,6 +187,7 @@ class COCOInstance(LightningDataModule):
 
         return self
 
+
     def train_dataloader(self):
         return DataLoader(
             self.train_dataset,
@@ -185,6 +196,7 @@ class COCOInstance(LightningDataModule):
             collate_fn=self.train_collate,
             **self.dataloader_kwargs,
         )
+
 
     def val_dataloader(self):
         return DataLoader(

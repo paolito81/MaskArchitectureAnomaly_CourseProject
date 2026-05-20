@@ -1,5 +1,3 @@
-
-#first section 
 trainer:
   max_epochs: 107
   logger:
@@ -7,23 +5,28 @@ trainer:
     init_args:
       resume: allow
       project: "eomt"
-      name: "cityscapes_semantic_eomt_base_640"
-
-
+      name: "cityscapes_semantic_eomt_base_640_lora_from_coco"
 model:
   class_path: training.mask_classification_semantic.MaskClassificationSemantic
   init_args:
     attn_mask_annealing_enabled: True
-    attn_mask_annealing_start_steps: [3317, 8292, 13268]
-    attn_mask_annealing_end_steps: [6634, 11609, 16585]
+    attn_mask_annealing_start_steps: [29564, 73910, 118256]
+    attn_mask_annealing_end_steps: [59128, 103474, 147820]
     network:
       class_path: models.eomt.EoMT
       init_args:
-        num_q: 100
+        num_q: 200
         num_blocks: 3
         encoder:
           class_path: models.vit.ViT
           init_args:
             backbone_name: vit_base_patch14_reg4_dinov2
+            lora_enabled: true
+            lora_rank: 8
+            lora_alpha: 16.0
+            lora_dropout: 0.05
+            lora_targets: ["attn.qkv"]
 data:
   class_path: datasets.cityscapes_semantic.CityscapesSemantic
+  init_args:
+    img_size: [640, 640]

@@ -34,6 +34,7 @@ from torch.nn.functional import interpolate
 from torchvision.transforms.v2.functional import pad
 import logging
 
+from models.lora import is_lora_parameter
 from training.two_stage_warmup_poly_schedule import TwoStageWarmupPolySchedule
 
 bold_green = "\033[1;32m"
@@ -43,6 +44,9 @@ reset = "\033[0m"
 class LightningModule(lightning.LightningModule):
     def __init__(
         self,
+        # the network is the model architecture that will be trained,
+        # which is passed as an argument to the constructor of the LightningModule class.
+        # This allows for flexibility in choosing different model architectures for training and evaluation.
         network: nn.Module,
         img_size: tuple[int, int],
         num_classes: int,
@@ -60,8 +64,7 @@ class LightningModule(lightning.LightningModule):
         delta_weights=False,
         load_ckpt_class_head=True,
     ):
-        super().__init__()
-
+        super().__init__()  # calls the constructor of the parent class and creates instance attributes (self.something) and stores values in them.
         self.network = network
         self.img_size = img_size
         self.num_classes = num_classes
@@ -78,7 +81,12 @@ class LightningModule(lightning.LightningModule):
 
         self.strict_loading = False
 
-        if delta_weights and ckpt_path:
+        # this block handles check-point loading and delta weights,
+        # which is a technique used to initialize the model with pre-trained weights while allowing for modifications to the architecture.
+
+        if (
+            delta_weights and ckpt_path
+        ):  # case 1: we want to use delta weights and we have a checkpoint path provided
             logging.info("Delta weights mode")
             self._zero_init_outside_encoder(skip_class_head=not load_ckpt_class_head)
             current_state_dict = {k: v.cpu() for k, v in self.state_dict().items()}
@@ -92,13 +100,17 @@ class LightningModule(lightning.LightningModule):
             combined_state_dict = self._add_state_dicts(current_state_dict, ckpt)
             incompatible_keys = self.load_state_dict(combined_state_dict, strict=False)
             self._raise_on_incompatible(incompatible_keys, load_ckpt_class_head)
-        elif ckpt_path:
+
+        elif (
+            ckpt_path
+        ):  # case 2: we have a checkpoint path provided but we do not want to use delta weights, so we simply load the checkpoint weights into the model without any modifications.
             ckpt = self._load_ckpt(ckpt_path, load_ckpt_class_head)
             incompatible_keys = self.load_state_dict(ckpt, strict=False)
             self._raise_on_incompatible(incompatible_keys, load_ckpt_class_head)
 
         self.log = torch.compiler.disable(self.log)  # type: ignore
 
+    # This creates the optimizer and learning-rate scheduler.
     def configure_optimizers(self):
         encoder_param_names = {
             n for n, _ in self.network.encoder.backbone.named_parameters()
@@ -117,10 +129,11 @@ class LightningModule(lightning.LightningModule):
 
             if (
                 name.startswith("network.class_head")
-                or name.startswith("network.mask_head")
-                or name.startswith("network.upscale")
+                # or name.startswith("network.mask_head")
+                # or name.startswith("network.upscale")
+                # or is_lora_parameter(name)
             ):
-                param.requires_grad = True
+                param.requires_grad = True  # In this way we ensure that the classification head, mask head, and upscale layers are always trained, even if delta_weights is True and we are loading weights from a checkpoint.
             else:
                 param.requires_grad = False
 
@@ -182,11 +195,16 @@ class LightningModule(lightning.LightningModule):
             },
         }
 
+    # how input data flows through the neural network
     def forward(self, imgs):
         x = imgs / 255.0
 
         return self.network(x)
 
+    # 1. get a batch
+    # 2. run the model
+    # 3. compute losses
+    # 4. return the total loss
     def training_step(self, batch, batch_idx):
         imgs, targets = batch
 
@@ -903,8 +921,24 @@ class LightningModule(lightning.LightningModule):
                 for k, v in ckpt.items()
                 if "class_head" not in k and "class_predictor" not in k
             }
+        ckpt = self._map_ckpt_to_lora_wrappers(ckpt)
         logging.info(f"Loaded {len(ckpt)} keys")
         return ckpt
+
+    def _map_ckpt_to_lora_wrappers(self, ckpt):
+        current_keys = self.state_dict().keys()
+        mapped = {}
+
+        for key, value in ckpt.items():
+            lora_key = key.replace(".weight", ".linear.weight").replace(
+                ".bias", ".linear.bias"
+            )
+            if lora_key in current_keys:
+                mapped[lora_key] = value
+            else:
+                mapped[key] = value
+
+        return mapped
 
     def _raise_on_incompatible(self, incompatible_keys, load_ckpt_class_head):
         if incompatible_keys.missing_keys:
@@ -916,6 +950,7 @@ class LightningModule(lightning.LightningModule):
                 ]
             else:
                 missing_keys = incompatible_keys.missing_keys
+            missing_keys = [key for key in missing_keys if not is_lora_parameter(key)]
             if missing_keys:
                 raise ValueError(f"Missing keys: {missing_keys}")
         if incompatible_keys.unexpected_keys:

@@ -12,6 +12,7 @@ from datasets.lightning_data_module import LightningDataModule
 from datasets.transforms import Transforms
 from datasets.dataset import Dataset
 
+#COCO has 133 classes but the IDs are not contiguous
 CLASS_MAPPING = {
     1: 0,
     2: 1,
@@ -150,7 +151,7 @@ CLASS_MAPPING = {
 
 
 class COCOPanoptic(LightningDataModule):
-    def __init__(
+    def __init__( 
         self,
         path,
         stuff_classes: list[int],
@@ -161,9 +162,10 @@ class COCOPanoptic(LightningDataModule):
         color_jitter_enabled=False,
         scale_range=(0.1, 2.0),
         check_empty_targets=True,
-    ) -> None:
-        super().__init__(
-            path=path,
+    ) -> None: #the function does not return anything
+        super().__init__( #calls the constructor of the parent class (LightningDataModule) to initialize the common functionality and structure for loading and preprocessing data for training and evaluation.
+            #passes values into the parent constructor 
+            path=path, #left side: parameters name expected by the parent class constructor, right side: parameters name used in the current constructor
             batch_size=batch_size,
             num_workers=num_workers,
             num_classes=num_classes,
@@ -178,10 +180,47 @@ class COCOPanoptic(LightningDataModule):
             scale_range=scale_range,
         )
 
-    @staticmethod
+    #Red channel:
+    #1 1
+    #2 2
+
+    #Green:
+    #0 0
+    #0 0
+
+    #Blue:
+    #0 0
+    #0 0
+
+    #Decoded:
+    #1 1
+    #2 2
+
+    #After Unique:
+    #1 2  
+
+    #RGB image
+    #    ↓
+    #decode RGB into IDs
+    #    ↓
+    #2D matrix of object IDs
+    #    ↓
+    # find unique objects
+    #    ↓
+    # create masks
+
+    #In panoptic segmentation, each unique color corresponds to one segment/object region. 
+    #The RGB values are decoded into a single ID value per pixel, which represents the segment or object that the pixel belongs to. 
+    #By finding the unique ID values in the target segmentation map, we can identify different segments or objects in the image. 
+    #For each unique ID, we create a binary mask that indicates which pixels belong to that segment or object. 
+    #This process allows us to generate binary masks for each instance in the COCO dataset based on their panoptic segmentation annotations.
+
+    @staticmethod 
     def target_parser(target, labels_by_id, is_crowd_by_id, **kwargs):
+        #this line converts RGB values to a single ID value per pixel
         target = target[0, :, :] + target[1, :, :] * 256 + target[2, :, :] * 256**2
 
+        #three lists instead of two for segmentation 
         masks, labels, is_crowd = [], [], []
 
         for label_id in target.unique():
@@ -191,6 +230,16 @@ class COCOPanoptic(LightningDataModule):
             cls_id = labels_by_id[label_id.item()]
             if cls_id not in CLASS_MAPPING:
                 continue
+
+            #mask for segments
+
+            #same color
+            #    ↓
+            #same segment/object
+            #    ↓
+            #same object ID
+            #    ↓
+            #same mask
 
             masks.append(target == label_id)
             labels.append(CLASS_MAPPING[cls_id])
@@ -226,7 +275,20 @@ class COCOPanoptic(LightningDataModule):
         )
 
         return self
+    
+    
+    #Training:
 
+    #dataset
+    #   ↓
+    #shuffle
+    #   ↓
+    #group into batches
+    #   ↓
+    #collate into tensors
+
+
+    #(no inherited)
     def train_dataloader(self):
         return DataLoader(
             self.train_dataset,
@@ -236,6 +298,19 @@ class COCOPanoptic(LightningDataModule):
             **self.dataloader_kwargs,
         )
 
+
+    #Validation:
+    
+    #dataset
+    #   ↓
+    #no shuffle
+    #   ↓
+    #group into batches
+    #   ↓
+    #prepare evaluation format
+
+
+    #(no inherited)
     def val_dataloader(self):
         return DataLoader(
             self.val_dataset,

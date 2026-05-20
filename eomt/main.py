@@ -6,7 +6,9 @@
 # used under the Apache 2.0 License.
 # ---------------------------------------------------------------
 
-
+import sys
+if sys.version_info < (3, 12):
+    model = torch.compile(model)
 import jsonargparse._typehints as _t
 from types import MethodType
 from gitignore_parser import parse_gitignore

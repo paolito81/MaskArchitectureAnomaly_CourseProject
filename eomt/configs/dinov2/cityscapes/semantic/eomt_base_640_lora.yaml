@@ -1,5 +1,3 @@
-
-#first section 
 trainer:
   max_epochs: 107
   logger:
@@ -7,9 +5,7 @@ trainer:
     init_args:
       resume: allow
       project: "eomt"
-      name: "cityscapes_semantic_eomt_base_640"
-
-
+      name: "cityscapes_semantic_eomt_base_640_lora"
 model:
   class_path: training.mask_classification_semantic.MaskClassificationSemantic
   init_args:
@@ -25,5 +21,10 @@ model:
           class_path: models.vit.ViT
           init_args:
             backbone_name: vit_base_patch14_reg4_dinov2
+            lora_enabled: true
+            lora_rank: 8
+            lora_alpha: 16.0
+            lora_dropout: 0.05
+            lora_targets: ["attn.qkv"]
 data:
   class_path: datasets.cityscapes_semantic.CityscapesSemantic
