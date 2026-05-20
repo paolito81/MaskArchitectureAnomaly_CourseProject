@@ -186,3 +186,5 @@ Report/
 
 __pycache__/
 *.py[cod]
+
+eval/_logits_cache/

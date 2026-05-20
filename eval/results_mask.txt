@@ -1,0 +1,147 @@
+
+# ==== score (T=1) ====
+cityscapes         | MSP        | FS_LostFound_full    | AUPRC:   2.84% | FPR@95:  30.49% | n=99
+cityscapes         | MAXLOGIT   | FS_LostFound_full    | AUPRC:  26.73% | FPR@95:  12.58% | n=99
+cityscapes         | MAXENTROPY | FS_LostFound_full    | AUPRC:   4.25% | FPR@95:  30.61% | n=99
+cityscapes         | RBA        | FS_LostFound_full    | AUPRC:  27.54% | FPR@95:   8.04% | n=99
+cityscapes         | MSP        | fs_static            | AUPRC:   8.11% | FPR@95:  52.95% | n=20
+cityscapes         | MAXLOGIT   | fs_static            | AUPRC:  55.07% | FPR@95:  35.89% | n=20
+cityscapes         | MAXENTROPY | fs_static            | AUPRC:   9.90% | FPR@95:  53.79% | n=20
+cityscapes         | RBA        | fs_static            | AUPRC:  57.07% | FPR@95:  33.78% | n=20
+cityscapes         | MSP        | RoadAnomaly          | AUPRC:  47.63% | FPR@95:  45.58% | n=60
+cityscapes         | MAXLOGIT   | RoadAnomaly          | AUPRC:  76.90% | FPR@95:  19.91% | n=60
+cityscapes         | MAXENTROPY | RoadAnomaly          | AUPRC:  51.20% | FPR@95:  45.08% | n=60
+cityscapes         | RBA        | RoadAnomaly          | AUPRC:  77.07% | FPR@95:  17.20% | n=60
+cityscapes         | MSP        | RoadAnomaly21        | AUPRC:  62.73% | FPR@95:  27.91% | n=10
+cityscapes         | MAXLOGIT   | RoadAnomaly21        | AUPRC:  75.74% | FPR@95:  34.58% | n=10
+cityscapes         | MAXENTROPY | RoadAnomaly21        | AUPRC:  66.22% | FPR@95:  27.01% | n=10
+cityscapes         | RBA        | RoadAnomaly21        | AUPRC:  74.99% | FPR@95:  46.25% | n=10
+cityscapes         | MSP        | RoadObsticle21       | AUPRC:  72.08% | FPR@95:   9.16% | n=30
+cityscapes         | MAXLOGIT   | RoadObsticle21       | AUPRC:  89.24% | FPR@95:   0.37% | n=30
+cityscapes         | MAXENTROPY | RoadObsticle21       | AUPRC:  78.05% | FPR@95:   9.15% | n=30
+cityscapes         | RBA        | RoadObsticle21       | AUPRC:  87.90% | FPR@95:  56.70% | n=30
+
+# ==== score (T=1) ====
+coco               | MSP        | FS_LostFound_full    | AUPRC:   0.75% | FPR@95:  44.23% | n=99
+coco               | MAXLOGIT   | FS_LostFound_full    | AUPRC:   1.44% | FPR@95:  96.64% | n=99
+coco               | MAXENTROPY | FS_LostFound_full    | AUPRC:   1.41% | FPR@95:  37.93% | n=99
+coco               | RBA        | FS_LostFound_full    | AUPRC:   0.34% | FPR@95:  96.20% | n=99
+coco               | MSP        | fs_static            | AUPRC:   7.27% | FPR@95:  95.10% | n=20
+coco               | MAXLOGIT   | fs_static            | AUPRC:   6.40% | FPR@95:  96.65% | n=20
+coco               | MAXENTROPY | fs_static            | AUPRC:   6.50% | FPR@95:  94.85% | n=20
+coco               | RBA        | fs_static            | AUPRC:   2.20% | FPR@95:  99.96% | n=20
+coco               | MSP        | RoadAnomaly          | AUPRC:  10.77% | FPR@95:  94.17% | n=60
+coco               | MAXLOGIT   | RoadAnomaly          | AUPRC:  21.05% | FPR@95:  94.28% | n=60
+coco               | MAXENTROPY | RoadAnomaly          | AUPRC:  16.93% | FPR@95:  93.77% | n=60
+coco               | RBA        | RoadAnomaly          | AUPRC:  20.66% | FPR@95:  84.34% | n=60
+coco               | MSP        | RoadAnomaly21        | AUPRC:  18.13% | FPR@95:  89.63% | n=10
+coco               | MAXLOGIT   | RoadAnomaly21        | AUPRC:  35.22% | FPR@95:  87.83% | n=10
+coco               | MAXENTROPY | RoadAnomaly21        | AUPRC:  21.95% | FPR@95:  89.57% | n=10
+coco               | RBA        | RoadAnomaly21        | AUPRC:  37.53% | FPR@95:  62.06% | n=10
+coco               | MSP        | RoadObsticle21       | AUPRC:   6.07% | FPR@95: 100.00% | n=30
+coco               | MAXLOGIT   | RoadObsticle21       | AUPRC:   3.08% | FPR@95:  99.99% | n=30
+coco               | MAXENTROPY | RoadObsticle21       | AUPRC:  19.17% | FPR@95: 100.00% | n=30
+coco               | RBA        | RoadObsticle21       | AUPRC:  37.30% | FPR@95: 100.00% | n=30
+
+# ==== score (T=1) ====
+finetuned          | MSP        | FS_LostFound_full    | AUPRC:  12.75% | FPR@95:  52.75% | n=99
+finetuned          | MAXLOGIT   | FS_LostFound_full    | AUPRC:  42.00% | FPR@95:  23.57% | n=99
+finetuned          | MAXENTROPY | FS_LostFound_full    | AUPRC:  23.92% | FPR@95:  53.01% | n=99
+finetuned          | RBA        | FS_LostFound_full    | AUPRC:  40.55% | FPR@95:  66.13% | n=99
+finetuned          | MSP        | fs_static            | AUPRC:  44.80% | FPR@95:  23.61% | n=20
+finetuned          | MAXLOGIT   | fs_static            | AUPRC:  83.20% | FPR@95:   7.33% | n=20
+finetuned          | MAXENTROPY | fs_static            | AUPRC:  67.33% | FPR@95:  21.27% | n=20
+finetuned          | RBA        | fs_static            | AUPRC:  76.54% | FPR@95:   4.09% | n=20
+finetuned          | MSP        | RoadAnomaly          | AUPRC:  69.73% | FPR@95:  43.72% | n=60
+finetuned          | MAXLOGIT   | RoadAnomaly          | AUPRC:  73.81% | FPR@95:  27.93% | n=60
+finetuned          | MAXENTROPY | RoadAnomaly          | AUPRC:  77.22% | FPR@95:  41.73% | n=60
+finetuned          | RBA        | RoadAnomaly          | AUPRC:  68.34% | FPR@95:  43.00% | n=60
+finetuned          | MSP        | RoadAnomaly21        | AUPRC:  74.40% | FPR@95:  38.52% | n=10
+finetuned          | MAXLOGIT   | RoadAnomaly21        | AUPRC:  62.96% | FPR@95:  25.95% | n=10
+finetuned          | MAXENTROPY | RoadAnomaly21        | AUPRC:  77.06% | FPR@95:  36.97% | n=10
+finetuned          | RBA        | RoadAnomaly21        | AUPRC:  45.46% | FPR@95:  99.11% | n=10
+finetuned          | MSP        | RoadObsticle21       | AUPRC:  31.62% | FPR@95:  12.22% | n=30
+finetuned          | MAXLOGIT   | RoadObsticle21       | AUPRC:  57.16% | FPR@95:   1.83% | n=30
+finetuned          | MAXENTROPY | RoadObsticle21       | AUPRC:  69.55% | FPR@95:  11.33% | n=30
+finetuned          | RBA        | RoadObsticle21       | AUPRC:  47.24% | FPR@95:  48.21% | n=30
+
+# ==== sweep (MSP at multiple T) ====
+cityscapes         | MSP(T=0.500)  | FS_LostFound_full    | AUPRC:   2.25% | FPR@95:  32.12% | n=99
+cityscapes         | MSP(T=0.750)  | FS_LostFound_full    | AUPRC:   2.50% | FPR@95:  31.68% | n=99
+cityscapes         | MSP(T=1.000)  | FS_LostFound_full    | AUPRC:   2.84% | FPR@95:  30.49% | n=99
+cityscapes         | MSP(T=1.100)* | FS_LostFound_full    | AUPRC:   2.92% | FPR@95:  32.48% | n=99
+cityscapes         | best T = 1.100 | FS_LostFound_full
+cityscapes         | MSP(T=0.500)* | fs_static            | AUPRC:   8.26% | FPR@95:  50.70% | n=20
+cityscapes         | MSP(T=0.750)  | fs_static            | AUPRC:   8.17% | FPR@95:  50.25% | n=20
+cityscapes         | MSP(T=1.000)  | fs_static            | AUPRC:   8.11% | FPR@95:  52.95% | n=20
+cityscapes         | MSP(T=1.100)  | fs_static            | AUPRC:   8.10% | FPR@95:  57.69% | n=20
+cityscapes         | best T = 0.500 | fs_static
+cityscapes         | MSP(T=0.500)  | RoadAnomaly          | AUPRC:  38.84% | FPR@95:  39.27% | n=60
+cityscapes         | MSP(T=0.750)  | RoadAnomaly          | AUPRC:  43.62% | FPR@95:  45.78% | n=60
+cityscapes         | MSP(T=1.000)  | RoadAnomaly          | AUPRC:  47.63% | FPR@95:  45.58% | n=60
+cityscapes         | MSP(T=1.100)* | RoadAnomaly          | AUPRC:  48.40% | FPR@95:  43.45% | n=60
+cityscapes         | best T = 1.100 | RoadAnomaly
+cityscapes         | MSP(T=0.500)  | RoadAnomaly21        | AUPRC:  49.05% | FPR@95:  60.53% | n=10
+cityscapes         | MSP(T=0.750)  | RoadAnomaly21        | AUPRC:  55.00% | FPR@95:  39.05% | n=10
+cityscapes         | MSP(T=1.000)  | RoadAnomaly21        | AUPRC:  62.73% | FPR@95:  27.91% | n=10
+cityscapes         | MSP(T=1.100)* | RoadAnomaly21        | AUPRC:  64.31% | FPR@95:  25.60% | n=10
+cityscapes         | best T = 1.100 | RoadAnomaly21
+cityscapes         | MSP(T=0.500)  | RoadObsticle21       | AUPRC:  59.44% | FPR@95:   2.00% | n=30
+cityscapes         | MSP(T=0.750)  | RoadObsticle21       | AUPRC:  64.57% | FPR@95:   1.61% | n=30
+cityscapes         | MSP(T=1.000)  | RoadObsticle21       | AUPRC:  72.08% | FPR@95:   9.16% | n=30
+cityscapes         | MSP(T=1.100)* | RoadObsticle21       | AUPRC:  74.93% | FPR@95:  23.48% | n=30
+cityscapes         | best T = 1.100 | RoadObsticle21
+
+# ==== sweep (MSP at multiple T) ====
+coco               | MSP(T=0.500)  | FS_LostFound_full    | AUPRC:   0.55% | FPR@95:  49.04% | n=99
+coco               | MSP(T=0.750)  | FS_LostFound_full    | AUPRC:   0.61% | FPR@95:  46.63% | n=99
+coco               | MSP(T=1.000)  | FS_LostFound_full    | AUPRC:   0.75% | FPR@95:  44.23% | n=99
+coco               | MSP(T=1.100)* | FS_LostFound_full    | AUPRC:   0.85% | FPR@95:  43.99% | n=99
+coco               | best T = 1.100 | FS_LostFound_full
+coco               | MSP(T=0.500)* | fs_static            | AUPRC:   8.35% | FPR@95:  88.27% | n=20
+coco               | MSP(T=0.750)  | fs_static            | AUPRC:   8.08% | FPR@95:  90.48% | n=20
+coco               | MSP(T=1.000)  | fs_static            | AUPRC:   7.27% | FPR@95:  95.10% | n=20
+coco               | MSP(T=1.100)  | fs_static            | AUPRC:   7.00% | FPR@95:  95.11% | n=20
+coco               | best T = 0.500 | fs_static
+coco               | MSP(T=0.500)  | RoadAnomaly          | AUPRC:   9.43% | FPR@95:  89.52% | n=60
+coco               | MSP(T=0.750)  | RoadAnomaly          | AUPRC:   9.66% | FPR@95:  94.17% | n=60
+coco               | MSP(T=1.000)  | RoadAnomaly          | AUPRC:  10.77% | FPR@95:  94.17% | n=60
+coco               | MSP(T=1.100)* | RoadAnomaly          | AUPRC:  11.49% | FPR@95:  93.84% | n=60
+coco               | best T = 1.100 | RoadAnomaly
+coco               | MSP(T=0.500)  | RoadAnomaly21        | AUPRC:  13.42% | FPR@95:  89.71% | n=10
+coco               | MSP(T=0.750)  | RoadAnomaly21        | AUPRC:  16.06% | FPR@95:  90.58% | n=10
+coco               | MSP(T=1.000)  | RoadAnomaly21        | AUPRC:  18.13% | FPR@95:  89.63% | n=10
+coco               | MSP(T=1.100)* | RoadAnomaly21        | AUPRC:  18.71% | FPR@95:  89.63% | n=10
+coco               | best T = 1.100 | RoadAnomaly21
+coco               | MSP(T=0.500)* | RoadObsticle21       | AUPRC:   6.43% | FPR@95: 100.00% | n=30
+coco               | MSP(T=0.750)  | RoadObsticle21       | AUPRC:   6.14% | FPR@95: 100.00% | n=30
+coco               | MSP(T=1.000)  | RoadObsticle21       | AUPRC:   6.07% | FPR@95: 100.00% | n=30
+coco               | MSP(T=1.100)  | RoadObsticle21       | AUPRC:   6.34% | FPR@95: 100.00% | n=30
+coco               | best T = 0.500 | RoadObsticle21
+
+# ==== sweep (MSP at multiple T) ====
+finetuned          | MSP(T=0.500)  | FS_LostFound_full    | AUPRC:   1.00% | FPR@95:  57.51% | n=99
+finetuned          | MSP(T=0.750)  | FS_LostFound_full    | AUPRC:   4.51% | FPR@95:  55.65% | n=99
+finetuned          | MSP(T=1.000)  | FS_LostFound_full    | AUPRC:  12.75% | FPR@95:  52.75% | n=99
+finetuned          | MSP(T=1.100)* | FS_LostFound_full    | AUPRC:  16.24% | FPR@95:  52.15% | n=99
+finetuned          | best T = 1.100 | FS_LostFound_full
+finetuned          | MSP(T=0.500)  | fs_static            | AUPRC:  14.86% | FPR@95:  42.30% | n=20
+finetuned          | MSP(T=0.750)  | fs_static            | AUPRC:  29.85% | FPR@95:  31.02% | n=20
+finetuned          | MSP(T=1.000)  | fs_static            | AUPRC:  44.80% | FPR@95:  23.61% | n=20
+finetuned          | MSP(T=1.100)* | fs_static            | AUPRC:  49.10% | FPR@95:  21.88% | n=20
+finetuned          | best T = 1.100 | fs_static
+finetuned          | MSP(T=0.500)  | RoadAnomaly          | AUPRC:  39.10% | FPR@95:  54.21% | n=60
+finetuned          | MSP(T=0.750)  | RoadAnomaly          | AUPRC:  58.99% | FPR@95:  48.28% | n=60
+finetuned          | MSP(T=1.000)  | RoadAnomaly          | AUPRC:  69.73% | FPR@95:  43.72% | n=60
+finetuned          | MSP(T=1.100)* | RoadAnomaly          | AUPRC:  71.73% | FPR@95:  42.14% | n=60
+finetuned          | best T = 1.100 | RoadAnomaly
+finetuned          | MSP(T=0.500)  | RoadAnomaly21        | AUPRC:  52.12% | FPR@95:  49.27% | n=10
+finetuned          | MSP(T=0.750)  | RoadAnomaly21        | AUPRC:  66.69% | FPR@95:  43.34% | n=10
+finetuned          | MSP(T=1.000)  | RoadAnomaly21        | AUPRC:  74.40% | FPR@95:  38.52% | n=10
+finetuned          | MSP(T=1.100)* | RoadAnomaly21        | AUPRC:  76.02% | FPR@95:  37.15% | n=10
+finetuned          | best T = 1.100 | RoadAnomaly21
+finetuned          | MSP(T=0.500)  | RoadObsticle21       | AUPRC:   4.73% | FPR@95:  20.92% | n=30
+finetuned          | MSP(T=0.750)  | RoadObsticle21       | AUPRC:  11.73% | FPR@95:  16.49% | n=30
+finetuned          | MSP(T=1.000)  | RoadObsticle21       | AUPRC:  31.62% | FPR@95:  12.22% | n=30
+finetuned          | MSP(T=1.100)* | RoadObsticle21       | AUPRC:  40.03% | FPR@95:  10.61% | n=30
+finetuned          | best T = 1.100 | RoadObsticle21
