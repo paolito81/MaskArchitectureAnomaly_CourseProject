@@ -105,9 +105,15 @@ class MaskClassificationSemantic(LightningModule):
             self.update_metrics_semantic(logits, targets, i)
 
             if batch_idx == 0:
-                self.plot_semantic(
-                    imgs[0], targets[0], logits[0], log_prefix, i, batch_idx
-                )
+                try:
+                    self.plot_semantic(
+                        imgs[0], targets[0], logits[0], log_prefix, i, batch_idx
+                    )
+                except (FileNotFoundError, OSError) as e:
+                    # Windows temp-dir cleanup occasionally races with wandb image save;
+                    # skip the plot rather than crash training.
+                    import logging
+                    logging.warning(f"Skipped val image logging due to temp file issue: {e}")
 
     def on_validation_epoch_end(self):
         self._on_eval_epoch_end_semantic("val")

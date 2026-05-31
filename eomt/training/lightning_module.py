@@ -37,6 +37,10 @@ import logging
 from models.lora import is_lora_parameter
 from training.two_stage_warmup_poly_schedule import TwoStageWarmupPolySchedule
 
+###
+from timm.layers import resample_abs_pos_embed
+###
+
 bold_green = "\033[1;32m"
 reset = "\033[0m"
 
@@ -129,9 +133,9 @@ class LightningModule(lightning.LightningModule):
 
             if (
                 name.startswith("network.class_head")
-                # or name.startswith("network.mask_head")
-                # or name.startswith("network.upscale")
-                # or is_lora_parameter(name)
+                or name.startswith("network.mask_head")
+                or name.startswith("network.upscale")
+                or is_lora_parameter(name)
             ):
                 param.requires_grad = True  # In this way we ensure that the classification head, mask head, and upscale layers are always trained, even if delta_weights is True and we are loading weights from a checkpoint.
             else:
@@ -909,21 +913,83 @@ class LightningModule(lightning.LightningModule):
             summed[k] = state_dict1[k] + state_dict2[k]
 
         return summed
-
+    
     def _load_ckpt(self, ckpt_path, load_ckpt_class_head):
+        try:
+            from timm.layers import resample_abs_pos_embed
+        except ImportError:
+            from timm.models.layers import resample_abs_pos_embed
+
         ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
         if "state_dict" in ckpt:
-            ckpt = ckpt["state_dict"]
-        ckpt = {k: v for k, v in ckpt.items() if "criterion.empty_weight" not in k}
+            checkpoint_data = ckpt["state_dict"]
+        else:
+            checkpoint_data = ckpt
+
+        checkpoint_data = {k: v for k, v in checkpoint_data.items() if "criterion.empty_weight" not in k}
         if not load_ckpt_class_head:
-            ckpt = {
+            checkpoint_data = {
                 k: v
-                for k, v in ckpt.items()
+                for k, v in checkpoint_data.items()
                 if "class_head" not in k and "class_predictor" not in k
             }
-        ckpt = self._map_ckpt_to_lora_wrappers(ckpt)
-        logging.info(f"Loaded {len(ckpt)} keys")
-        return ckpt
+        checkpoint_data = self._map_ckpt_to_lora_wrappers(checkpoint_data)
+
+        # ----- Dynamic Positional Embedding Interpolation using timm -----
+        pos_key = "network.encoder.backbone.pos_embed"
+        if pos_key in checkpoint_data and pos_key in self.state_dict():
+            ckpt_pos_shape = checkpoint_data[pos_key].shape
+            model_pos_shape = self.state_dict()[pos_key].shape
+
+            if ckpt_pos_shape != model_pos_shape:
+                logging.info(f"Interpolating {pos_key} from {ckpt_pos_shape} to {model_pos_shape}")
+
+                # The model uses prefix tokens (CLS + registers)
+                num_prefix_tokens = getattr(self.network.encoder.backbone, "num_prefix_tokens", 0)
+
+                # Calculate target spatial grid dimension (e.g., sqrt(1024 - 0) -> 32)
+                # Note: If your model state_dict is 1024, it means it also doesn't contain prefix tokens in pos_embed
+                has_model_prefix = (model_pos_shape[1] == 1025 or model_pos_shape[1] == 1029)
+                model_prefix_count = num_prefix_tokens if has_model_prefix else 0
+                
+                new_grid_size = int(math.sqrt(model_pos_shape[1] - model_prefix_count))
+
+                # Force num_prefix_tokens=0 for the checkpoint tensor so timm sees a perfect 40x40 grid
+                interpolated_embed = resample_abs_pos_embed(
+                    checkpoint_data[pos_key],
+                    new_size=[new_grid_size, new_grid_size],
+                    num_prefix_tokens=0, 
+                    interpolation="bicubic"
+                )
+
+                # If your model actually expects prefix tokens in its pos_embed, add them back as zeros
+                if model_prefix_count > 0:
+                    logging.info(f"Appending {model_prefix_count} zero prefix tokens to match model architecture.")
+                    prefix_tokens = torch.zeros((1, model_prefix_count, interpolated_embed.shape[-1]), 
+                                                dtype=interpolated_embed.dtype, 
+                                                device=interpolated_embed.device)
+                    interpolated_embed = torch.cat([prefix_tokens, interpolated_embed], dim=1)
+
+                checkpoint_data[pos_key] = interpolated_embed
+        # -----------------------------------------------------------------
+
+        logging.info(f"Loaded {len(checkpoint_data)} keys")
+        return checkpoint_data
+
+    # def _load_ckpt(self, ckpt_path, load_ckpt_class_head):
+    #     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+    #     if "state_dict" in ckpt:
+    #         ckpt = ckpt["state_dict"]
+    #     ckpt = {k: v for k, v in ckpt.items() if "criterion.empty_weight" not in k}
+    #     if not load_ckpt_class_head:
+    #         ckpt = {
+    #             k: v
+    #             for k, v in ckpt.items()
+    #             if "class_head" not in k and "class_predictor" not in k
+    #         }
+    #     ckpt = self._map_ckpt_to_lora_wrappers(ckpt)
+    #     logging.info(f"Loaded {len(ckpt)} keys")
+    #     return ckpt
 
     def _map_ckpt_to_lora_wrappers(self, ckpt):
         current_keys = self.state_dict().keys()
