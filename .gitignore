@@ -183,3 +183,8 @@ cython_debug/
 Report/
 
 .DS_Store
+
+__pycache__/
+*.py[cod]
+
+eval/_logits_cache/

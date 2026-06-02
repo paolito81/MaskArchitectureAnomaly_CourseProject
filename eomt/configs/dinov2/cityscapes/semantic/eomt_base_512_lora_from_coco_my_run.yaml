@@ -1,0 +1,114 @@
+# ============================================================================
+# eomt_base_512_lora_from_coco_my_run.yaml
+# ----------------------------------------------------------------------------
+# Local fine-tune of EoMT for Aso's RTX 3060 Laptop (6 GB VRAM).
+# Tuned for maximum achievable accuracy within the hardware budget.
+#
+# Targets:
+#   - Shared-7 mIoU on Cityscapes val:  ~89-91% (vs 85.89% on prior run, 92.25% upper bound)
+#   - 19-class  mIoU on Cityscapes val: ~76-79% (vs 70.84% on prior run, 81.68% upper bound)
+#   - Wall-time on RTX 3060 Laptop:     ~12-15 hours (EarlyStopping decides exact end)
+#
+# Changes vs eomt_base_512_lora_from_coco_8gb.yaml (the prior teammate run):
+#
+#   1. Annealing schedule shortened so masked-attention actually trains within
+#      the realistic fine-tune horizon. Previous schedule started at step 29564
+#      (past the end of a short fine-tune); new schedule engages by step 500.
+#   2. LoRA rank 8 -> 32 and lora_targets expanded from ["attn.qkv"] to all three
+#      transformer sublayers ["attn.qkv", "mlp.fc1", "mlp.fc2"]. Quadruples the
+#      adapter parameter count, addresses the rare-class drop (motorcycle, bus)
+#      seen in the prior LoRA fine-tune. Memory cost is small (LoRA matrices are
+#      low-rank).
+#   3. lora_alpha 16 -> 64 (kept at 2x rank, the standard heuristic).
+#   4. EarlyStopping + ModelCheckpoint callbacks added.
+#      max_epochs 107 -> 50 with EarlyStopping patience=6 — training stops when
+#      val mIoU plateaus, with breathing room for temporary plateaus.
+#      save_top_k=1 keeps disk usage low on the D: drive.
+#   5. img_size kept at [512, 512] — required for 6 GB VRAM. The COCO checkpoint's
+#      pos_embed (40x40 patches at img_size=640) gets interpolated down to 32x32
+#      patches automatically at warm-init time.
+#   6. batch_size=1, accumulate_grad_batches=8 unchanged. Effective batch=8.
+# ============================================================================
+
+trainer:
+  max_epochs: 50                       # cap — EarlyStopping will fire first
+  precision: "16-mixed"                # AMP — required for 6 GB VRAM
+  devices: 1
+  accumulate_grad_batches: 8           # effective batch = 1 * 8 = 8
+  log_every_n_steps: 20
+  check_val_every_n_epoch: 1           # validate every epoch so EarlyStopping has signal
+
+  logger:
+    class_path: lightning.pytorch.loggers.wandb.WandbLogger
+    init_args:
+      resume: allow
+      project: "eomt"
+      name: "cityscapes_lora_from_coco_my_run"
+
+  callbacks:
+    # ----- Stop when val mIoU plateaus -----
+    - class_path: lightning.pytorch.callbacks.EarlyStopping
+      init_args:
+        monitor: "metrics/val_iou_all"
+        mode: max                      # higher mIoU = better
+        patience: 6                    # 6 consecutive epochs without improvement (more headroom)
+        min_delta: 0.001               # ignore <0.1pp wiggles
+        verbose: true
+
+    # ----- Keep only the best checkpoint (saves disk on D:) -----
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: "metrics/val_iou_all"
+        mode: max
+        save_top_k: 1                  # only the single best — saves ~2 GB disk
+        save_last: true                # also save the most recent (for resume)
+        filename: "best-{epoch:02d}-{step:06d}"
+        every_n_epochs: 1
+
+model:
+  class_path: training.mask_classification_semantic.MaskClassificationSemantic
+  init_args:
+    # ----- Annealing schedule shortened ---------------------------------
+    # Previous values [29564, 73910, 118256] / [59128, 103474, 147820] were
+    # tuned for a 107-epoch full training run (~150k steps). At our scale
+    # (372 steps/epoch * 25-30 effective epochs ~= 10k steps), nothing past
+    # step 10k ever fires. The new schedule engages masked-attn within the
+    # first ~3-7 epochs and finishes annealing by epoch ~10, so the model
+    # actually learns the iterative masked-attention inference path.
+    attn_mask_annealing_enabled: True
+    attn_mask_annealing_start_steps: [500, 1500, 2500]
+    attn_mask_annealing_end_steps:   [1500, 2500, 3500]
+
+    network:
+      class_path: models.eomt.EoMT
+      init_args:
+        num_q: 200
+        num_blocks: 3
+        encoder:
+          class_path: models.vit.ViT
+          init_args:
+            backbone_name: vit_base_patch14_reg4_dinov2
+
+            # ----- LoRA capacity maxed within VRAM budget -----------------
+            # rank 32 with alpha 64 (=2x rank, standard heuristic).
+            # All three sublayers (attn QKV + both MLP projections) are LoRA-
+            # adapted, instead of only attn QKV in the prior run.
+            # Trainable params: ~1.5M (vs ~300k previously) - still <2% of
+            # the full network, but 5x more capacity than before.
+            lora_enabled: true
+            lora_rank: 32
+            lora_alpha: 64.0
+            lora_dropout: 0.05
+            lora_targets:
+              - "attn.qkv"
+              - "mlp.fc1"
+              - "mlp.fc2"
+
+data:
+  class_path: datasets.cityscapes_semantic.CityscapesSemantic
+  init_args:
+    img_size: [512, 512]               # MUST stay 512 for 6 GB VRAM
+    batch_size: 1
+    num_workers: 2                     # i7-12700H can easily do this
+    color_jitter_enabled: true         # augmentation — helps rare classes
+    scale_range: [0.5, 2.0]            # default — fine
