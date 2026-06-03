@@ -120,13 +120,33 @@ This command evaluates the same `EoMT-L` model using 4 GPUs with a batch size of
 
 A [notebook](inference.ipynb) is available for quick inference and visualization with auto-downloaded pre-trained models.
 
-## Shared classes pipeline
+## Shared classes evaluation
 
-These are the commands to run for the shared classes pipeline. You can find the list of shared classes in the file `shared.py`.
+Use `eval_shared_miou.py` to evaluate an EoMT checkpoint on the Cityscapes validation set after remapping model outputs and Cityscapes targets into a common label space. The mappings are defined in `shared_eval/shared.py`.
 
-### COCO
+The default evaluation label space is `shared`, which contains these 7 classes:
 
-To evaluate the COCO trained model on the Cityscapes dataset, run:
+```text
+person, car, truck, bus, motorcycle, bicycle, traffic light
+```
+
+The script also supports `--eval-label-space cityscapes`, which evaluates in the 19-class Cityscapes space. When the source checkpoint is COCO-trained, only Cityscapes classes with a COCO mapping are scored; the unmatched Cityscapes GT classes are ignored.
+
+### Common arguments
+
+- `--config`: source model config used to rebuild the model architecture.
+- `--ckpt`: checkpoint to load.
+- `--cityscapes-path`: directory containing the Cityscapes zip files.
+- `--src-label-space`: source model output space. Defaults to `auto`, inferred from `data.class_path` in the config. Use `coco` or `cityscapes` only if the config cannot be inferred correctly.
+- `--eval-label-space`: metric label space. Use `shared` for the 7 shared classes or `cityscapes` for the Cityscapes-space evaluation.
+- `--masked-attn-enabled` / `--no-masked-attn-enabled`: inference-time masked-attention override. The default is disabled, so the explicit `--no-masked-attn-enabled` flag is optional.
+- `--limit`: optional number of validation images to process for debugging.
+- `--wandb-mode`: `disabled`, `offline`, or `online`. Defaults to `disabled`.
+- `--wandb-project` and `--wandb-name`: optional W&B overrides. If omitted, the script uses the logger project/name from the config when available.
+
+The script prints per-class IoU, mIoU, valid/ignored pixel counts, a confusion matrix, and a row-normalized confusion matrix. With W&B enabled, it logs the metrics, audit counts, source code, and one qualitative image/GT/prediction example.
+
+### COCO checkpoint on Cityscapes, shared classes
 
 ```bash
 python3 eval_shared_miou.py \
@@ -136,22 +156,38 @@ python3 eval_shared_miou.py \
   --device cuda:0 \
   --batch-size 1 \
   --num-workers 2 \
-  --no-masked-attn-enabled \
+  --eval-label-space shared \
   --wandb-mode online
 ```
 
-### Cityscapes
-
-To evaluate the Cityscapes trained model on the Cityscapes dataset, run:
+### Cityscapes checkpoint on Cityscapes, shared classes
 
 ```bash
 python3 eval_shared_miou.py \
-  --config configs/dinov2/coco/panoptic/eomt_base_640.yaml \
+  --config configs/dinov2/cityscapes/semantic/eomt_base_640.yaml \
   --ckpt /path/to/cityscapes_ckpt \
   --cityscapes-path /path/to/cityscapes \
   --device cuda:0 \
   --batch-size 1 \
   --num-workers 2 \
-  --no-masked-attn-enabled \
+  --eval-label-space shared \
   --wandb-mode online
 ```
+
+### Cityscapes-space evaluation
+
+Use this when you want metrics in the Cityscapes label space instead of only the 7 shared classes.
+
+```bash
+python3 eval_shared_miou.py \
+  --config /path/to/source_config.yaml \
+  --ckpt /path/to/checkpoint \
+  --cityscapes-path /path/to/cityscapes \
+  --device cuda:0 \
+  --batch-size 1 \
+  --num-workers 2 \
+  --eval-label-space cityscapes \
+  --wandb-mode online
+```
+
+For quick checks, add `--limit 10` and keep `--wandb-mode disabled`.

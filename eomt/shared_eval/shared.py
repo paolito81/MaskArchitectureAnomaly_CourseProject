@@ -1,5 +1,3 @@
-import torch
-
 IGNORE_INDEX = 255
 
 COCO_ID_TO_LABEL = {
@@ -183,25 +181,26 @@ SHARED_CLASSES = [
 
 SHARED_NAME_TO_ID = {label: idx for idx, label in enumerate(SHARED_CLASSES)}
 
-CITYSCAPES_TO_SHARED = {
-    CITYSCAPES_LABEL_TO_ID["person"]: SHARED_NAME_TO_ID["person"],
-    CITYSCAPES_LABEL_TO_ID["car"]: SHARED_NAME_TO_ID["car"],
-    CITYSCAPES_LABEL_TO_ID["truck"]: SHARED_NAME_TO_ID["truck"],
-    CITYSCAPES_LABEL_TO_ID["bus"]: SHARED_NAME_TO_ID["bus"],
-    CITYSCAPES_LABEL_TO_ID["motorcycle"]: SHARED_NAME_TO_ID["motorcycle"],
-    CITYSCAPES_LABEL_TO_ID["bicycle"]: SHARED_NAME_TO_ID["bicycle"],
-    CITYSCAPES_LABEL_TO_ID["traffic light"]: SHARED_NAME_TO_ID["traffic light"],
-}
 
-COCO_TO_SHARED = {
-    COCO_LABEL_TO_ID["person"]: SHARED_NAME_TO_ID["person"],
-    COCO_LABEL_TO_ID["car"]: SHARED_NAME_TO_ID["car"],
-    COCO_LABEL_TO_ID["truck"]: SHARED_NAME_TO_ID["truck"],
-    COCO_LABEL_TO_ID["bus"]: SHARED_NAME_TO_ID["bus"],
-    COCO_LABEL_TO_ID["motorcycle"]: SHARED_NAME_TO_ID["motorcycle"],
-    COCO_LABEL_TO_ID["bicycle"]: SHARED_NAME_TO_ID["bicycle"],
-    COCO_LABEL_TO_ID["traffic light"]: SHARED_NAME_TO_ID["traffic light"],
-}
+def _map_same_labels(source_label_to_id, target_label_to_id, labels):
+    return {
+        source_label_to_id[label]: target_label_to_id[label]
+        for label in labels
+    }
+
+
+def _map_label_pairs(source_label_to_id, target_label_to_id, label_pairs):
+    return {
+        source_label_to_id[source_label]: target_label_to_id[target_label]
+        for source_label, target_label in label_pairs
+    }
+
+
+CITYSCAPES_TO_SHARED = _map_same_labels(
+    CITYSCAPES_LABEL_TO_ID, SHARED_NAME_TO_ID, SHARED_CLASSES
+)
+
+COCO_TO_SHARED = _map_same_labels(COCO_LABEL_TO_ID, SHARED_NAME_TO_ID, SHARED_CLASSES)
 
 CITYSCAPES_TO_CITYSCAPES = {
     cityscapes_id: cityscapes_id for cityscapes_id in CITYSCAPES_LABEL_TO_ID.values()
@@ -210,31 +209,35 @@ CITYSCAPES_TO_CITYSCAPES = {
 # Approximate mapping from COCO panoptic labels into the Cityscapes semantic
 # label space. Classes that do not have a reasonable COCO counterpart are left
 # unmapped and should be ignored during evaluation.
-COCO_TO_CITYSCAPES = {
-    COCO_LABEL_TO_ID["road"]: CITYSCAPES_LABEL_TO_ID["road"],
-    COCO_LABEL_TO_ID["pavement-merged"]: CITYSCAPES_LABEL_TO_ID["sidewalk"],
-    COCO_LABEL_TO_ID["building-other-merged"]: CITYSCAPES_LABEL_TO_ID["building"],
-    COCO_LABEL_TO_ID["house"]: CITYSCAPES_LABEL_TO_ID["building"],
-    COCO_LABEL_TO_ID["wall-brick"]: CITYSCAPES_LABEL_TO_ID["wall"],
-    COCO_LABEL_TO_ID["wall-stone"]: CITYSCAPES_LABEL_TO_ID["wall"],
-    COCO_LABEL_TO_ID["wall-tile"]: CITYSCAPES_LABEL_TO_ID["wall"],
-    COCO_LABEL_TO_ID["wall-wood"]: CITYSCAPES_LABEL_TO_ID["wall"],
-    COCO_LABEL_TO_ID["wall-other-merged"]: CITYSCAPES_LABEL_TO_ID["wall"],
-    COCO_LABEL_TO_ID["fence-merged"]: CITYSCAPES_LABEL_TO_ID["fence"],
-    COCO_LABEL_TO_ID["traffic light"]: CITYSCAPES_LABEL_TO_ID["traffic light"],
-    COCO_LABEL_TO_ID["stop sign"]: CITYSCAPES_LABEL_TO_ID["traffic sign"],
-    COCO_LABEL_TO_ID["tree-merged"]: CITYSCAPES_LABEL_TO_ID["vegetation"],
-    COCO_LABEL_TO_ID["grass-merged"]: CITYSCAPES_LABEL_TO_ID["terrain"],
-    COCO_LABEL_TO_ID["dirt-merged"]: CITYSCAPES_LABEL_TO_ID["terrain"],
-    COCO_LABEL_TO_ID["sky-other-merged"]: CITYSCAPES_LABEL_TO_ID["sky"],
-    COCO_LABEL_TO_ID["person"]: CITYSCAPES_LABEL_TO_ID["person"],
-    COCO_LABEL_TO_ID["car"]: CITYSCAPES_LABEL_TO_ID["car"],
-    COCO_LABEL_TO_ID["truck"]: CITYSCAPES_LABEL_TO_ID["truck"],
-    COCO_LABEL_TO_ID["bus"]: CITYSCAPES_LABEL_TO_ID["bus"],
-    COCO_LABEL_TO_ID["train"]: CITYSCAPES_LABEL_TO_ID["train"],
-    COCO_LABEL_TO_ID["motorcycle"]: CITYSCAPES_LABEL_TO_ID["motorcycle"],
-    COCO_LABEL_TO_ID["bicycle"]: CITYSCAPES_LABEL_TO_ID["bicycle"],
-}
+COCO_TO_CITYSCAPES_LABELS = [
+    ("road", "road"),
+    ("pavement-merged", "sidewalk"),
+    ("building-other-merged", "building"),
+    ("house", "building"),
+    ("wall-brick", "wall"),
+    ("wall-stone", "wall"),
+    ("wall-tile", "wall"),
+    ("wall-wood", "wall"),
+    ("wall-other-merged", "wall"),
+    ("fence-merged", "fence"),
+    ("traffic light", "traffic light"),
+    ("stop sign", "traffic sign"),
+    ("tree-merged", "vegetation"),
+    ("grass-merged", "terrain"),
+    ("dirt-merged", "terrain"),
+    ("sky-other-merged", "sky"),
+    ("person", "person"),
+    ("car", "car"),
+    ("truck", "truck"),
+    ("bus", "bus"),
+    ("train", "train"),
+    ("motorcycle", "motorcycle"),
+    ("bicycle", "bicycle"),
+]
+
+COCO_TO_CITYSCAPES = _map_label_pairs(
+    COCO_LABEL_TO_ID, CITYSCAPES_LABEL_TO_ID, COCO_TO_CITYSCAPES_LABELS
+)
 
 
 def remap_target_ids(target, id_map, ignore_index=IGNORE_INDEX):
@@ -244,8 +247,8 @@ def remap_target_ids(target, id_map, ignore_index=IGNORE_INDEX):
     return remapped
 
 
-def remap_logits(logits, id_map, num_shared):
-    shared = logits.new_zeros((num_shared, *logits.shape[1:]))
+def remap_logits(logits, id_map, num_classes):
+    remapped = logits.new_zeros((num_classes, *logits.shape[1:]))
     for src_id, dst_id in id_map.items():
-        shared[dst_id] += logits[src_id]
-    return shared
+        remapped[dst_id] += logits[src_id]
+    return remapped
