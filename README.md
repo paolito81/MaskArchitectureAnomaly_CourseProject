@@ -62,7 +62,6 @@ MaskArchitectureAnomaly_CourseProject/
 │   ├── eomt_adapter.py            # Config-driven EoMT loader
 │   └── gt_utils.py                # GT mask loading / label unification
 ├── erfnet_pytorch/                # ERFNet checkpoint + helper code
-├── report/                        # Final report sources
 └── README.md
 ```
 
