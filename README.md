@@ -63,7 +63,7 @@ MaskArchitectureAnomaly_CourseProject/
 │   └── gt_utils.py                # GT mask loading / label unification
 ├── erfnet_pytorch/                # ERFNet checkpoint + helper code
 ├── report/                        # Final report sources
-└── README_REPO.md
+└── README.md
 ```
 
 ---
