@@ -7,7 +7,6 @@ lightning==2.5.1.post0
 numpy<2
 transformers==4.50.0
 scipy==1.15.2
-# Torch 2.2.x wheels are intended for Python 3.11 in this project setup.
 torch==2.7.0
 torchvision==0.22.0
 ipykernel==6.29.5

@@ -206,9 +206,6 @@ CITYSCAPES_TO_CITYSCAPES = {
     cityscapes_id: cityscapes_id for cityscapes_id in CITYSCAPES_LABEL_TO_ID.values()
 }
 
-# Approximate mapping from COCO panoptic labels into the Cityscapes semantic
-# label space. Classes that do not have a reasonable COCO counterpart are left
-# unmapped and should be ignored during evaluation.
 COCO_TO_CITYSCAPES_LABELS = [
     ("road", "road"),
     ("pavement-merged", "sidewalk"),

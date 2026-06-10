@@ -188,3 +188,5 @@ __pycache__/
 *.py[cod]
 
 eval/_logits_cache/
+.idea/
+*.pyc
