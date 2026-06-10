@@ -1,9 +1,8 @@
-# ============================================================================
 # eomt_adapter.py
-# ----------------------------------------------------------------------------
 # Adapter layer between Task-7's pixel-based eval scaffolding and the EoMT
 # (mask-classification) model in eomt/models/eomt.py.
-#
+
+
 # Responsibilities:
 #   1. Build an EoMT model from a YAML config (using the same construction
 #      logic as eomt/eval_shared_miou.py, so we never diverge).
@@ -12,12 +11,8 @@
 #   3. Single-shot inference helper that takes an image tensor at the model's
 #      training resolution and returns the LAST-LAYER (mask_logits, class_logits)
 #      tuple, ready for downstream mask-architecture anomaly scoring.
-#
-# Tensor shapes throughout:
-#   image_in        : [1, 3, H_in, W_in]            (H_in == W_in == config img_size)
-#   mask_logits     : [1, Q, h, w]                  RAW, pre-sigmoid; (h,w) = patch_grid * scaleblocks
-#   class_logits    : [1, Q, C+1]                   RAW, pre-softmax; last slot is "no-object"
-# ============================================================================
+
+
 
 from __future__ import annotations
 
@@ -31,11 +26,11 @@ import torch
 import torch.nn as nn
 import yaml
 
-# ----------------------------------------------------------------------------
+
+
 # Path bootstrap: this file lives in `eval/` but EoMT modules live in `eomt/`.
 # We add the eomt directory to sys.path so `from datasets.*`, `from models.*`,
 # `from training.*` work regardless of which cwd the user runs us from.
-# ----------------------------------------------------------------------------
 _THIS_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _THIS_DIR.parent
 _EOMT_DIR = _REPO_ROOT / "eomt"
@@ -43,9 +38,7 @@ if str(_EOMT_DIR) not in sys.path:
     sys.path.insert(0, str(_EOMT_DIR))
 
 
-# ----------------------------------------------------------------------------
-# Reflection helpers — same approach as eval_shared_miou.py
-# ----------------------------------------------------------------------------
+# Reflection helpers
 def _import_class(class_path: str):
     """Resolve a dotted class path like 'models.eomt.EoMT' to the class object."""
     module_name, class_name = class_path.rsplit(".", 1)
@@ -61,25 +54,14 @@ def _get_constructor_default(cls, param_name):
     return param.default
 
 
-# ----------------------------------------------------------------------------
+
 # Model construction
-# ----------------------------------------------------------------------------
 def build_eomt_from_config(
     config_path: str,
     masked_attn_enabled: bool = False,
     device: str = "cuda",
 ) -> Tuple[nn.Module, dict]:
-    """
-    Build an EoMT Lightning module from a YAML config.
 
-    masked_attn_enabled is forced False at inference (matches notebook eval
-    and the original RbA / EoMT-as-decoder evaluation protocol — no iterative
-    mask refinement during single-shot inference).
-
-    Returns:
-        model           : nn.Module on `device`, in eval() mode.
-        meta            : dict with {num_classes, img_size, num_q}
-    """
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
@@ -131,21 +113,10 @@ def build_eomt_from_config(
     return model, meta
 
 
-# ----------------------------------------------------------------------------
-# Unified checkpoint loader (.bin = raw state_dict | .ckpt = Lightning dict)
-# ----------------------------------------------------------------------------
-def load_eomt_checkpoint(model: nn.Module, ckpt_path: str, strict: bool = False) -> None:
-    """
-    Loads either:
-      - a .bin file: torch.save(state_dict) — raw dict of tensors, keys like
-        'network.encoder.backbone....' or just 'encoder.backbone....'
-      - a .ckpt file: PyTorch Lightning checkpoint with top-level keys
-        like {'state_dict': ..., 'optimizer_states': ..., ...}
 
-    We unwrap the Lightning wrapper if present, drop loss/criterion buffers
-    that don't belong to the inference graph, and load with strict=False so
-    a single missing buffer like attn_mask_probs does not abort.
-    """
+# Unified checkpoint loader (.bin = raw state_dict | .ckpt = Lightning dict)
+def load_eomt_checkpoint(model: nn.Module, ckpt_path: str, strict: bool = False) -> None:
+
     obj = torch.load(ckpt_path, map_location="cpu", weights_only=True)
     state_dict = obj["state_dict"] if isinstance(obj, dict) and "state_dict" in obj else obj
 
@@ -162,33 +133,15 @@ def load_eomt_checkpoint(model: nn.Module, ckpt_path: str, strict: bool = False)
               f"(usually training-only state — safe)")
 
 
-# ----------------------------------------------------------------------------
+
 # Single-shot inference
-# ----------------------------------------------------------------------------
 @torch.no_grad()
 def forward_eomt_last_layer(
     model: nn.Module,
     image_chw: torch.Tensor,
     device: str = "cuda",
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Run a single image through EoMT at the model's native img_size and
-    return ONLY the last-layer mask & class logits.
 
-    Args:
-        model      : an EoMT-wrapping LightningModule (e.g. MaskClassificationSemantic).
-                     We call `model.network(...)` directly to bypass any per-layer-list
-                     bookkeeping in eval_step.
-        image_chw  : Tensor [3, H_in, W_in] OR [1, 3, H_in, W_in] in [0,1] float — the
-                     EoMT model handles its own (x - mean) / std internally, so DO NOT
-                     pre-normalize here.
-        device     : where to run.
-
-    Returns:
-        mask_logits  : [Q, h, w]   fp32, raw (pre-sigmoid)
-        class_logits : [Q, C+1]    fp32, raw (pre-softmax)
-        Both on CPU to make caching easy.
-    """
     if image_chw.dim() == 3:
         image_chw = image_chw.unsqueeze(0)
     image_chw = image_chw.to(device, non_blocking=True).float()

@@ -1,30 +1,29 @@
-# ============================================================================
-# evalAnomaly_mask_methods.py  --  Task 8 main entry point
-# ----------------------------------------------------------------------------
+# evalAnomaly_mask_methods.py  -->  Our Task 8 main entry point
 # Mask-architecture anomaly segmentation evaluation for EoMT.
-#
+
+
+
 # Three execution modes (single CLI):
-#
+
 #   --mode cache    Run EoMT forward once over the dataset and cache the
 #                   last-layer (mask_logits, class_logits) tuples to disk.
 #                   HEAVY. Use this exactly once per (checkpoint × dataset).
-#
+
 #   --mode score    Read cached logits and compute MSP / MaxLogit /
 #                   MaxEntropy / RbA at T=1. CHEAP. Writes results_mask.txt.
-#
+
 #   --mode sweep    Read cached logits, sweep MSP at a grid of temperatures,
 #                   pick the AuPRC-best T per (checkpoint × dataset).
-#
+
 #   --mode full     cache → score → sweep in one invocation.
-#
+
 # Three checkpoint presets (resolved to your absolute paths):
-#
-#   --preset cityscapes   eomt_cityscapes.bin   + cityscapes/semantic/eomt_base_640.yaml
-#   --preset coco         eomt_coco.bin         + coco/panoptic/eomt_base_640_2x.yaml
-#   --preset finetuned    epoch=9-step=3720.ckpt + cityscapes/semantic/eomt_base_640_finetune.yaml
-#
-# You can also override with --config and --ckpt explicitly for any preset.
-# ============================================================================
+
+#   --preset cityscapes   
+#   --preset coco         
+#   --preset finetuned    
+
+
 
 from __future__ import annotations
 
@@ -56,13 +55,11 @@ from temperature_sweep import sweep_temperatures, best_temperature_by_auprc
 
 try:
     from ood_metrics import fpr_at_95_tpr
-except Exception:                                                   # pragma: no cover
-    fpr_at_95_tpr = None                                            # type: ignore[assignment]
+except Exception:                                                  
+    fpr_at_95_tpr = None                                            
 
 
-# ----------------------------------------------------------------------------
-# Reproducibility (matches Task 7 settings — disable cuDNN benchmark)
-# ----------------------------------------------------------------------------
+# Reproducibility (matches our Task 7 settings)
 SEED = 42
 import random
 random.seed(SEED)
@@ -72,9 +69,7 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 
-# ----------------------------------------------------------------------------
 # Constants
-# ----------------------------------------------------------------------------
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _RESULTS_FILE = Path(__file__).resolve().parent / "results_mask.txt"
 
@@ -91,22 +86,16 @@ PRESETS: Dict[str, Tuple[str, str]] = {
         r"D:\Project\data\eomt_coco.bin",
     ),
     "finetuned": (
-        # NB: the epoch=9-step=3720 checkpoint is a LoRA fine-tune from
-        # eomt_coco.bin, trained at img_size=512 with patch_size=16
-        # (verified from the checkpoint's hyper_parameters).
         "eomt/configs/dinov2/cityscapes/semantic/eomt_base_512_lora_from_coco_8gb.yaml",
         r"D:\Project\data\checkpoints\epoch=9-step=3720.ckpt",
     ),
 }
 
-# Default temperature sweep grid (assignment asks for 0.5 / 0.75 / 1.1 + best).
 # We add a few more so "best T" actually has room to move.
 DEFAULT_T_GRID: List[float] = [0.5, 0.75, 1.0, 1.1, 1.5, 2.0, 3.0, 5.0]
 
 
-# ----------------------------------------------------------------------------
 # FPR95 helper (uses ood_metrics if available, else manual)
-# ----------------------------------------------------------------------------
 def _fpr95(scores: np.ndarray, labels: np.ndarray) -> float:
     if fpr_at_95_tpr is not None:
         return float(fpr_at_95_tpr(scores, labels))
@@ -118,13 +107,11 @@ def _fpr95(scores: np.ndarray, labels: np.ndarray) -> float:
     return float((neg >= thresh).mean())
 
 
-# ----------------------------------------------------------------------------
 # Image preprocessing for the EoMT forward pass
-# ----------------------------------------------------------------------------
 def make_input_transform(model_img_size: Tuple[int, int]):
     """
     Resize image to EoMT's training resolution (square), to ToTensor → [0,1].
-    EoMT does its own pixel mean/std normalization inside forward(); do NOT
+    EoMT does its own pixel mean/std normalization inside forward(). And we do NOT
     normalize here.
     """
     return Compose([
@@ -133,9 +120,7 @@ def make_input_transform(model_img_size: Tuple[int, int]):
     ])
 
 
-# ============================================================================
 # MODE: cache
-# ============================================================================
 def run_cache_mode(args, model, meta, ckpt_tag: str, config_path: str) -> None:
     """
     Run EoMT once over every image in --input and persist last-layer logits.
@@ -192,9 +177,7 @@ def run_cache_mode(args, model, meta, ckpt_tag: str, config_path: str) -> None:
             torch.cuda.empty_cache()
 
 
-# ============================================================================
 # MODE: score
-# ============================================================================
 def _eval_one_method_on_dataset(
     cache_root: str | Path,
     ckpt_tag: str,
@@ -283,9 +266,7 @@ def run_score_mode(args, ckpt_tag: str) -> None:
     print(f"[score] appended {len(rows)} rows to {_RESULTS_FILE}")
 
 
-# ============================================================================
 # MODE: sweep
-# ============================================================================
 def run_sweep_mode(args, ckpt_tag: str) -> None:
     """
     Sweep MSP across DEFAULT_T_GRID for every cached dataset under ckpt_tag.
@@ -323,9 +304,7 @@ def run_sweep_mode(args, ckpt_tag: str) -> None:
     print(f"[sweep] appended {len(rows)} rows to {_RESULTS_FILE}")
 
 
-# ============================================================================
-# CLI plumbing
-# ============================================================================
+# CLI
 def resolve_preset(args) -> Tuple[str, str, str]:
     """
     Resolve --preset / --config / --ckpt to absolute paths and a ckpt_tag.

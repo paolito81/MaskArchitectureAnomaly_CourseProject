@@ -191,3 +191,5 @@ eval/_logits_cache/
 .idea/
 *.pyc
 eomt/colab notebooks/
+
+docs/

@@ -3,12 +3,15 @@
 #   - MSP          (Maximum Softmax Probability)
 #   - MaxLogit     (Maximum Raw Logit)
 #   - MaxEntropy   (Shannon Entropy over softmax distribution)
-#
+
+
 # Usage:
 #   python evalAnomaly_methods.py --method msp       --input <path_to_images_folder>
 #   python evalAnomaly_methods.py --method maxlogit  --input <path_to_images_folder>
 #   python evalAnomaly_methods.py --method maxentropy --input <path_to_images_folder>
-#
+
+
+
 
 import os
 import glob
@@ -23,9 +26,8 @@ from ood_metrics import fpr_at_95_tpr
 
 from erfnet import ERFNet
 
-# ──────────────────────────────────────────────────────────────
+
 # Reproducibility seeds
-# ──────────────────────────────────────────────────────────────
 SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
@@ -33,19 +35,16 @@ torch.manual_seed(SEED)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False      # Ensures reproducibility at the cost of some performance.
 
-# ──────────────────────────────────────────────────────────────
 # Constants
-# ──────────────────────────────────────────────────────────────
 NUM_CLASSES = 20
 IGNORE_LABEL = 255
 
-# ──────────────────────────────────────────────────────────────
+
 # Image & mask transforms
-# ──────────────────────────────────────────────────────────────
 # Resize input images to 512x1024 (ERFNet's training resolution)
 input_transform = Compose([
     Resize((512, 1024), Image.BILINEAR),
-    ToTensor(),                          # → [C, H, W], float32 in [0, 1]
+    ToTensor(),                          # [C, H, W], float32 in [0, 1]
 ])
 
 # Resize GT masks with nearest-neighbour to preserve label values
@@ -54,33 +53,12 @@ target_transform = Compose([
 ])
 
 
-# ──────────────────────────────────────────────────────────────
+
+
 # Anomaly score functions
 # Each function receives logits of shape [1, C, H, W] (on GPU)
 # and returns a numpy array of shape [H, W] (higher = more anomalous)
-# ──────────────────────────────────────────────────────────────
-
 def compute_msp(logits: torch.Tensor) -> np.ndarray:
-    """
-    MSP — Maximum Softmax Probability.
-
-    Formula:  score(x) = 1 - max_c( softmax(logits)_c )
-
-    Intuition:
-        A confident model concentrates probability on one class → high max → low score.
-        An uncertain model spreads probability → low max → high score → anomaly.
-
-    Note:
-        ERFNet returns raw logits (no softmax inside the model).
-        We MUST apply softmax here before taking the max.
-        Without softmax this would compute 1-max(logits) which is
-        unbounded and not a valid probability-based score.
-
-    Args:
-        logits: raw model output, shape [1, C, H, W], on GPU
-    Returns:
-        anomaly_map: numpy array [H, W], higher = more anomalous
-    """
     # Apply softmax over class dimension → valid probability distribution
     probs = torch.softmax(logits, dim=1)          # [1, C, H, W]
 
@@ -93,55 +71,16 @@ def compute_msp(logits: torch.Tensor) -> np.ndarray:
     return anomaly_map.cpu().numpy()
 
 
+
 def compute_maxlogit(logits: torch.Tensor) -> np.ndarray:
-    """
-    MaxLogit — Maximum Raw Logit score.
-
-    Formula:  score(x) = -max_c( logits_c )
-
-    Intuition:
-        Raw logits carry magnitude information that softmax destroys.
-        For known classes the model produces large positive logits.
-        For unknown objects the max logit is smaller → higher anomaly score.
-
-    Note:
-        No softmax needed here. We use logits directly.
-        We negate so that higher score = more anomalous (consistent with MSP).
-
-    Args:
-        logits: raw model output, shape [1, C, H, W], on GPU
-    Returns:
-        anomaly_map: numpy array [H, W], higher = more anomalous
-    """
     max_logit = logits.max(dim=1).values          # [1, H, W]
     anomaly_map = -max_logit.squeeze(0)           # [H, W], negated
 
     return anomaly_map.cpu().numpy()
 
 
+
 def compute_max_entropy(logits: torch.Tensor) -> np.ndarray:
-    """
-    MaxEntropy — Normalized Shannon entropy of the softmax distribution.
-
-    Formula:   H(x) = -sum_c [ p_c * log(p_c) ] / log(C)
-               score(x) = H(x)
-
-    Intuition:
-        Entropy measures how "spread" the probability distribution is.
-        Normalized to [0, 1] by dividing by the maximum possible entropy (log(C)).
-        
-        Known object   → concentrated distribution → entropy ~0 → low score.
-        Unknown object → spread/uniform distribution → entropy ~1 → high score.
-
-    Numerical stability:
-        log(0) is undefined. We add a small epsilon (1e-10) inside the log
-        to prevent NaN/Inf values when any probability approaches zero.
-
-    Args:
-        logits: raw model output, shape [1, C, H, W], on GPU
-    Returns:
-        anomaly_map: numpy array [H, W], range [0, 1], higher = more anomalous
-    """
     # Convert logits to probabilities
     probs = torch.softmax(logits, dim=1)                      # [1, C, H, W]
 
@@ -158,9 +97,8 @@ def compute_max_entropy(logits: torch.Tensor) -> np.ndarray:
     return anomaly_map.cpu().numpy()
 
 
-# ──────────────────────────────────────────────────────────────
-# Method registry — maps CLI name to function
-# ──────────────────────────────────────────────────────────────
+
+# Method registry - maps CLI name to function
 METHODS = {
     "msp":        compute_msp,
     "maxlogit":   compute_maxlogit,
@@ -168,22 +106,9 @@ METHODS = {
 }
 
 
-# ──────────────────────────────────────────────────────────────
+
 # Ground truth loading and label remapping
-# ──────────────────────────────────────────────────────────────
-
 def get_gt_path(image_path: str) -> str:
-    """
-    Build the ground truth mask path from an image path.
-
-    Datasets store masks in 'labels_masks/' next to 'images/'.
-    Some datasets also require an extension change (e.g. .webp → .png).
-
-    Args:
-        image_path: full path to input image
-    Returns:
-        path to corresponding GT mask (.png)
-    """
     # Replace 'images' subfolder with 'labels_masks'
     gt_path = image_path.replace("images", "labels_masks")
 
@@ -200,6 +125,7 @@ def get_gt_path(image_path: str) -> str:
         gt_path = gt_path.replace(".jpg", ".png")
 
     return gt_path
+
 
 
 def load_gt_mask(gt_path: str) -> np.ndarray:
@@ -233,22 +159,9 @@ def load_gt_mask(gt_path: str) -> np.ndarray:
     return ood_gts
 
 
-# ──────────────────────────────────────────────────────────────
+
 # Model loading
-# ──────────────────────────────────────────────────────────────
-
 def load_model(weights_path: str) -> torch.nn.Module:
-    """
-    Load pretrained ERFNet and move to GPU.
-
-    Uses a custom state dict loader to handle the 'module.' prefix
-    that appears when weights were saved from a DataParallel model.
-
-    Args:
-        weights_path: path to .pth weights file
-    Returns:
-        model in eval mode on GPU
-    """
     model = ERFNet(NUM_CLASSES)
     model = torch.nn.DataParallel(model).cuda()
 
@@ -276,10 +189,8 @@ def load_model(weights_path: str) -> torch.nn.Module:
     return model
 
 
-# ──────────────────────────────────────────────────────────────
-# Main evaluation loop
-# ──────────────────────────────────────────────────────────────
 
+# Main evaluation loop
 def evaluate(args):
     score_fn = METHODS[args.method]
 
@@ -317,7 +228,7 @@ def evaluate(args):
         # Shape: [1, 3, 512, 1024]
         # Note: ToTensor() already produces [C, H, W] — no permute needed
 
-        # Forward pass (inference only — no gradient computation)
+        # Forward pass (inference only - no gradient computation)
         with torch.no_grad():
             logits = model(img_tensor)          # [1, 20, 512, 1024] raw logits
 
@@ -351,9 +262,7 @@ def evaluate(args):
         print("[ERROR] No valid images with anomaly labels found.")
         return
 
-    # ──────────────────────────────────────────────────────
     # Compute metrics
-    # ──────────────────────────────────────────────────────
     ood_gts_arr = np.array(ood_gts_list)              # [N, H, W]
     scores_arr  = np.array(anomaly_score_list)         # [N, H, W]
 
@@ -376,9 +285,7 @@ def evaluate(args):
     auprc = average_precision_score(val_labels, val_scores)
     fpr95 = fpr_at_95_tpr(val_scores, val_labels)
 
-    # ──────────────────────────────────────────────────────
     # Print and save results
-    # ──────────────────────────────────────────────────────
     dataset_name = os.path.basename(os.path.dirname(input_dir.rstrip("/\\")))
     print(f"\n{'='*60}")
     print(f"  Method  : {args.method.upper()}")
@@ -396,10 +303,8 @@ def evaluate(args):
     print(f"[OK] Results saved to: {results_path}")
 
 
-# ──────────────────────────────────────────────────────────────
-# CLI
-# ──────────────────────────────────────────────────────────────
 
+# CLI
 def main():
     parser = ArgumentParser(
         description="ERFNet anomaly segmentation — MSP / MaxLogit / MaxEntropy"

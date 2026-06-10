@@ -1,10 +1,10 @@
-# ============================================================================
 # gt_utils.py
-# ----------------------------------------------------------------------------
+
 # Ground-truth and path utilities shared by the mask-based anomaly pipeline.
-# These mirror the conventions established in evalAnomaly_methods.py (Task 7)
+# These mirror the conventions established in evalAnomaly_methods.py
 # so results between ERFNet and EoMT are directly comparable.
-# ============================================================================
+
+
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from PIL import Image
 from torchvision.transforms import Compose, Resize
 
 
-# Standard anomaly-evaluation resolution. Matches Task 7 (evalAnomaly_methods.py).
+# Standard anomaly-evaluation resolution.
 DEFAULT_EVAL_HW = (512, 1024)
 
 

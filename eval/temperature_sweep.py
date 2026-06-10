@@ -1,15 +1,7 @@
-# ============================================================================
-# temperature_sweep.py
-# ----------------------------------------------------------------------------
-# Offline temperature search over cached EoMT logits.
-#
+
 # Inputs:  cache_root, ckpt_tag, dataset_name (which cache to read).
 # Output:  table {T -> {AuPRC, FPR95}} + the AuPRC-best T.
-#
-# Reuses mask_posthoc.msp_score with the temperature kwarg, so we never
-# re-run the model. The cost of one temperature is one renormalized softmax
-# + one einsum + one max — milliseconds per image on GPU.
-# ============================================================================
+
 
 from __future__ import annotations
 
@@ -23,8 +15,8 @@ from sklearn.metrics import average_precision_score
 
 try:
     from ood_metrics import fpr_at_95_tpr
-except Exception:                                                   # pragma: no cover
-    fpr_at_95_tpr = None                                            # type: ignore[assignment]
+except Exception:                                                   
+    fpr_at_95_tpr = None                                            
 
 from logits_cache import iter_cached, load_entry
 from mask_posthoc import msp_score
@@ -32,10 +24,6 @@ from gt_utils import load_gt_mask_for_anomaly
 
 
 def _fpr95(scores: np.ndarray, labels: np.ndarray) -> float:
-    """
-    Local fallback if ood_metrics isn't installed (it ships with the
-    Task-7 env so this should be a no-op).
-    """
     if fpr_at_95_tpr is not None:
         return float(fpr_at_95_tpr(scores, labels))
     # Manual FPR@95: find threshold giving TPR=0.95, then FPR at that threshold.
@@ -69,7 +57,7 @@ def evaluate_msp_at_T(
         if not Path(gt_path).exists():
             continue
         ood_gts = load_gt_mask_for_anomaly(gt_path, entry.img_size_hw)
-        # Skip frames with no anomaly pixels — matches Task-7 protocol.
+        # Skip frames with no anomaly pixels
         if 1 not in np.unique(ood_gts):
             continue
 
