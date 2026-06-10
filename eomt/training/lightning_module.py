@@ -130,18 +130,16 @@ class LightningModule(lightning.LightningModule):
 
         for name, param in reversed(list(self.named_parameters())):
             lr = self.lr
-
+        # freeze the ViT backbone and train only segmentation heads, upscale layers, and optional LoRA adapters
             if (
                 name.startswith("network.class_head")
                 or name.startswith("network.mask_head")
                 or name.startswith("network.upscale")
                 or is_lora_parameter(name)
             ):
-                param.requires_grad = True  # In this way we ensure that the classification head, mask head, and upscale layers are always trained, even if delta_weights is True and we are loading weights from a checkpoint.
+                param.requires_grad = True
             else:
                 param.requires_grad = False
-
-            print(name, param.requires_grad)
 
             if not param.requires_grad:
                 continue
